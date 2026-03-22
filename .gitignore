@@ -1,0 +1,31 @@
+!.vscode/*
+# Build directory
+build/
+
+# Pico SDK build files
+*.elf
+*.bin
+*.uf2
+*.map
+*.dis
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# VSCode
+.vscode/
+
+# Temporary files
+*.log
+*.tmp
+*.bak
+
+# KiCad generated files
+*.kicad_pcb-bak
+*.sch-bak
+*.gbr
+*.drl
+*.zip

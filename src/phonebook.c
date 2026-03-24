@@ -10,9 +10,7 @@
 #define PHONE_MAX_DIGITS 15
 #define DEFAULT_COUNTRY_CODE "31"
 
-#define FLASH_TARGET_OFFSET (1024 * 1024 - 4096)
-
-const uint8_t *flash_target_contents = (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
+const uint8_t *flash_target_contents = (const uint8_t *)(XIP_BASE + FLASH_PHONEBOOK_OFFSET);
 
 void phonebook_init(void)
 {
@@ -28,12 +26,7 @@ void phonebook_init(void)
         pb.magic = PHONEBOOK_MAGIC;
         pb.version = PHONEBOOK_VERSION;
 
-        uint32_t ints = save_and_disable_interrupts();
-
-        flash_range_erase(FLASH_TARGET_OFFSET, 4096);
-        flash_range_program(FLASH_TARGET_OFFSET, (uint8_t *)&pb, sizeof(phonebook_t));
-
-        restore_interrupts(ints);
+        phonebook_save(&pb);
     }
     else
     {
@@ -50,8 +43,8 @@ static void phonebook_save(phonebook_t *pb)
 {
     uint32_t ints = save_and_disable_interrupts();
 
-    flash_range_erase(FLASH_TARGET_OFFSET, 4096);
-    flash_range_program(FLASH_TARGET_OFFSET, (uint8_t *)pb, sizeof(phonebook_t));
+    flash_range_erase(FLASH_PHONEBOOK_OFFSET, 4096);
+    flash_range_program(FLASH_PHONEBOOK_OFFSET, (uint8_t *)pb, sizeof(phonebook_t));
 
     restore_interrupts(ints);
 }
@@ -61,7 +54,6 @@ int phonebook_add(const char *number)
     phonebook_t pb;
     char normalized[PHONENR_SIZE];
 
-    /* normalize number */
     if (!phone_normalize(normalized, number))
         return ERR_PB_INVALID_NUMBER;
 
@@ -70,20 +62,25 @@ int phonebook_add(const char *number)
     /* Check of al bestaat */
     for (int i = 0; i < MAX_PHONES; i++)
     {
-        if (strcmp(pb.numbers[i], normalized) == 0)
+        if (strcmp(pb.entries[i].number, normalized) == 0)
             return ERR_PB_NUMBER_ALREADY_EXISTS;
     }
 
     /* Zoek lege plek */
     for (int i = 0; i < MAX_PHONES; i++)
     {
-        if (pb.numbers[i][0] == 0)
+        if (pb.entries[i].number[0] == 0)
         {
-            strncpy(pb.numbers[i], normalized, PHONENR_SIZE - 1);
-            pb.numbers[i][PHONENR_SIZE - 1] = 0;
+            strncpy(pb.entries[i].number, normalized, PHONENR_SIZE - 1);
+            pb.entries[i].number[PHONENR_SIZE - 1] = 0;
+
+            /* Eerste nummer = admin */
+            if (phonebook_count() == 0)
+                pb.entries[i].isAdmin = 1;
+            else
+                pb.entries[i].isAdmin = 0;
 
             phonebook_save(&pb);
-
             return PB_OK;
         }
     }
@@ -103,9 +100,11 @@ int phonebook_remove(const char *number)
 
     for (int i = 0; i < MAX_PHONES; i++)
     {
-        if (strcmp(pb.numbers[i], normalized) == 0)
+        if (strcmp(pb.entries[i].number, normalized) == 0)
         {
-            pb.numbers[i][0] = 0;
+            pb.entries[i].number[0] = 0;
+            pb.entries[i].isAdmin = 0;
+
             phonebook_save(&pb);
             return PB_OK;
         }
@@ -121,7 +120,7 @@ bool phonebook_exists(const char *number)
 
     for (int i = 0; i < MAX_PHONES; i++)
     {
-        if (strcmp(pb.numbers[i], number) == 0)
+        if (strcmp(pb.entries[i].number, number) == 0)
             return true;
     }
 
@@ -137,14 +136,30 @@ int phonebook_count(void)
 
     for (int i = 0; i < MAX_PHONES; i++)
     {
-        if (pb.numbers[i][0])
+        if (pb.entries[i].number[0])
             count++;
     }
 
     return count;
 }
 
-bool phonebook_get(int index, char *number)
+int phonebook_count_admins(void)
+{
+    phonebook_t pb;
+    phonebook_load(&pb);
+
+    int count = 0;
+
+    for (int i = 0; i < MAX_PHONES; i++)
+    {
+        if (pb.entries[i].number[0] && pb.entries[i].isAdmin)
+            count++;
+    }
+
+    return count;
+}
+
+bool phonebook_get(int index, phonebook_entry_t *entry)
 {
     phonebook_t pb;
     phonebook_load(&pb);
@@ -152,11 +167,45 @@ bool phonebook_get(int index, char *number)
     if (index < 0 || index >= MAX_PHONES)
         return false;
 
-    if (pb.numbers[index][0] == 0)
+    if (pb.entries[index].number[0] == 0)
         return false;
 
-    strcpy(number, pb.numbers[index]);
+    strcpy(entry->number, pb.entries[index].number);
+    entry->isAdmin = pb.entries[index].isAdmin;
+    
     return true;
+}
+
+bool phonebook_is_admin(const char *number)
+{
+    phonebook_t pb;
+    phonebook_load(&pb);
+
+    for (int i = 0; i < MAX_PHONES; i++)
+    {
+        if (strcmp(pb.entries[i].number, number) == 0)
+            return pb.entries[i].isAdmin;
+    }
+
+    return false;
+}
+
+int phonebook_set_admin(const char *number, int isAdmin)
+{
+    phonebook_t pb;
+    phonebook_load(&pb);
+
+    for (int i = 0; i < MAX_PHONES; i++)
+    {
+        if (strcmp(pb.entries[i].number, number) == 0)
+        {
+            pb.entries[i].isAdmin = isAdmin ? 1 : 0;
+            phonebook_save(&pb);
+            return PB_OK;
+        }
+    }
+
+    return ERR_PB_NUMBER_NOT_FOUND;
 }
 
 /*

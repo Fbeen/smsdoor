@@ -15,6 +15,7 @@ line_buffer_t modem_line;
 
 char sms_number[PHONENR_SIZE];
 bool waiting_for_sms_text = false;
+static char pin[SIM_PIN_SIZE] = "0000";
 
 /* ----------------------------------------------------------
    Modem helpers
@@ -111,8 +112,10 @@ void modem_init()
     {
         printf("Unlocking SIM...\n");
 
+        config_get_pin(pin);
+
         char cmd[32];
-        sprintf(cmd, "AT+CPIN=\"%s\"", SIM_PIN);
+        sprintf(cmd, "AT+CPIN=\"%s\"", pin);
         modem_send(cmd);
         modem_wait_for("OK", 5000);
 
@@ -195,4 +198,102 @@ void modem_uart_task()
             }
         }
     }
+}
+
+bool modem_command(const char *cmd, char *response, int maxlen, uint32_t timeout_ms)
+{
+    char line[128];
+    int idx = 0;
+    int resp_idx = 0;
+
+    // UART buffer leegmaken
+    while (uart_is_readable(UART_MODEM))
+        uart_getc(UART_MODEM);
+
+    // Command sturen
+    uart_puts(UART_MODEM, cmd);
+    uart_puts(UART_MODEM, "\r\n");
+
+    absolute_time_t timeout = make_timeout_time_ms(timeout_ms);
+
+    while (!time_reached(timeout))
+    {
+        while (uart_is_readable(UART_MODEM))
+        {
+            char c = uart_getc(UART_MODEM);
+
+            // Debug output mag hier eventueel
+            // putchar(c);
+
+            if (c == '\r')
+                continue;
+
+            if (c == '\n')
+            {
+                line[idx] = 0;
+
+                if (idx > 0)
+                {
+                    // Regel opslaan in response buffer
+                    if (resp_idx + idx + 2 < maxlen)
+                    {
+                        strcpy(&response[resp_idx], line);
+                        resp_idx += idx;
+                        response[resp_idx++] = '\n';
+                        response[resp_idx] = 0;
+                    }
+
+                    if (strcmp(line, "OK") == 0)
+                        return true;
+
+                    if (strstr(line, "ERROR"))
+                        return false;
+                }
+
+                idx = 0;
+            }
+            else
+            {
+                if (idx < sizeof(line) - 1)
+                    line[idx++] = c;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool modem_get_time(char *datetime)
+{
+    char resp[256];
+
+    if (!modem_command("AT+CCLK?", resp, sizeof(resp), 2000))
+        return false;
+
+    // Zoek +CCLK regel
+    char *p = strstr(resp, "+CCLK:");
+    if (!p)
+        return false;
+
+    char *q1 = strchr(p, '"');
+    char *q2 = strchr(q1 + 1, '"');
+
+    if (!q1 || !q2)
+        return false;
+
+    char temp[32];
+    strncpy(temp, q1 + 1, q2 - q1 - 1);
+    temp[q2 - q1 - 1] = 0;
+
+    // temp = 25/03/24,21:43:12+04
+
+    char *tz = strchr(temp, '+');
+    if (tz) *tz = 0;
+
+    char *comma = strchr(temp, ',');
+    if (comma) *comma = ' ';
+
+    strcpy(datetime, temp);
+
+    return true;
 }

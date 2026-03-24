@@ -36,13 +36,14 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 
 add_executable(smsdoor 
-    main.c
-    hardware.c
-    phonebook.c
-    console.c
-    modem.c
-    commands.c
-    util.c
+    src/main.c
+    src/config.c
+    src/hardware.c
+    src/phonebook.c
+    src/console.c
+    src/modem.c
+    src/commands.c
+    src/util.c
 )
 
 pico_set_program_name(smsdoor "smsdoor")

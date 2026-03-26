@@ -8,6 +8,5 @@ void modem_init();
 void extract_sms_number(const char *line, char *number);
 void modem_uart_task();
 bool modem_command(const char *cmd, char *response, int maxlen, uint32_t timeout_ms);
-bool modem_get_time(char *datetime);
 
 #endif

@@ -7,6 +7,8 @@
 #include "phonebook.h"
 #include "modem.h"
 #include "commands.h"
+#include "clock.h"
+#include "rshutter.h"
 
 static const command_entry_t command_table[] =
 {
@@ -22,6 +24,7 @@ static const command_entry_t command_table[] =
     { CMD_HELP,   { "HELP", NULL }, CMD_LEVEL_ADMIN, cmd_help },
     { CMD_PIN,    { "PIN", NULL }, CMD_LEVEL_CONSOLE, cmd_pin },
     { CMD_INFO,   { "INFO", NULL }, CMD_LEVEL_ADMIN, cmd_info },
+    { CMD_CLOSEAT,{ "CLOSEAT", NULL }, CMD_LEVEL_ADMIN, cmd_closeat },
 };
 
 #define CMD_TABLE_SIZE (sizeof(command_table) / sizeof(command_table[0]))
@@ -329,11 +332,13 @@ static void cmd_demote(command_t *cmd, char *response)
 
 static void cmd_up(command_t *cmd, char *response)
 {
+    rshutter_up();
     strcat(response, "Rolluik gaat omhoog");
 }
 
 static void cmd_down(command_t *cmd, char *response)
 {
+    rshutter_down();
     strcat(response, "Rolluik gaat omlaag");
 }
 
@@ -411,8 +416,8 @@ static void cmd_pin(command_t *cmd, char *response)
 static void cmd_info(command_t *cmd, char *response)
 {
     char uptime[32];
-    char datetime[32];
-
+    struct tm nettime;
+    char tempbuf[32];
 
     get_uptime_string(uptime);
 
@@ -424,17 +429,60 @@ static void cmd_info(command_t *cmd, char *response)
     strcat(response, uptime);
     strcat(response, "\n");
 
-    if (modem_get_time(datetime))
+    if (get_time_from_modem(&nettime))
     {
+        datetime_to_string(&nettime, tempbuf, sizeof(tempbuf));
+
         strcat(response, "System time: ");
-        strcat(response, datetime);
+        strcat(response, tempbuf);
         strcat(response, "\n");
     }
 
-    char buf[32];
-    sprintf(buf, "Users %d Admin %d\n",
-            phonebook_count(),
-            phonebook_count_admins());
+    sprintf(tempbuf, "Users %d Admins %d\n", phonebook_count(), phonebook_count_admins());
+    strcat(response, tempbuf);
 
-    strcat(response, buf);
+    int h = cfg.close_time / 60;
+    int m = cfg.close_time % 60;
+
+    if(cfg.close_time == CLOSE_DISABLED) {
+        strcat(response, "Auto close time: OFF\n");
+    } else {
+        sprintf(tempbuf, "Auto close time: %d:%02d\n", h, m);
+        strcat(response, tempbuf);
+    }
+}
+
+static void cmd_closeat(command_t *cmd, char *response)
+{
+    char tempbuf[32];
+
+    str_to_upper(cmd->args);
+
+    if (strcmp(cmd->args, "OFF") == 0)
+    {
+        cfg.close_time = CLOSE_DISABLED;
+        config_save(&cfg);
+        strcat(response, "Auto close disabled");
+        return;
+    }
+
+    int h, m;
+
+    if (sscanf(cmd->args, "%d:%d", &h, &m) != 2)
+    {
+        strcat(response, "Invalid time");
+        return;
+    }
+
+    if (h < 0 || h > 23 || m < 0 || m > 59)
+    {
+        strcat(response, "Invalid time");
+        return;
+    }
+
+    cfg.close_time = h * 60 + m;
+    config_save();
+
+    sprintf(tempbuf, "Auto close set to %d:%02d", h, m);
+    strcat(response, tempbuf);
 }

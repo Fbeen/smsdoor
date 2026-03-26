@@ -26,6 +26,7 @@ typedef enum
     CMD_HELP,
     CMD_PIN,
     CMD_INFO,
+    CMD_CLOSEAT,
 } command_id_t;
 
 typedef struct
@@ -62,5 +63,6 @@ static void cmd_down(command_t *cmd, char *response);
 static void cmd_help(command_t *cmd, char *response);
 static void cmd_pin(command_t *cmd, char *response);
 static void cmd_info(command_t *cmd, char *response);
+static void cmd_closeat(command_t *cmd, char *response);
 
 #endif

@@ -112,10 +112,8 @@ void modem_init()
     {
         printf("Unlocking SIM...\n");
 
-        config_get_pin(pin);
-
         char cmd[32];
-        sprintf(cmd, "AT+CPIN=\"%s\"", pin);
+        sprintf(cmd, "AT+CPIN=\"%s\"", cfg.sim_pin);
         modem_send(cmd);
         modem_wait_for("OK", 5000);
 
@@ -261,39 +259,4 @@ bool modem_command(const char *cmd, char *response, int maxlen, uint32_t timeout
     }
 
     return false;
-}
-
-bool modem_get_time(char *datetime)
-{
-    char resp[256];
-
-    if (!modem_command("AT+CCLK?", resp, sizeof(resp), 2000))
-        return false;
-
-    // Zoek +CCLK regel
-    char *p = strstr(resp, "+CCLK:");
-    if (!p)
-        return false;
-
-    char *q1 = strchr(p, '"');
-    char *q2 = strchr(q1 + 1, '"');
-
-    if (!q1 || !q2)
-        return false;
-
-    char temp[32];
-    strncpy(temp, q1 + 1, q2 - q1 - 1);
-    temp[q2 - q1 - 1] = 0;
-
-    // temp = 25/03/24,21:43:12+04
-
-    char *tz = strchr(temp, '+');
-    if (tz) *tz = 0;
-
-    char *comma = strchr(temp, ',');
-    if (comma) *comma = ' ';
-
-    strcpy(datetime, temp);
-
-    return true;
 }

@@ -12,6 +12,12 @@
 
 #define UART_BAUDRATE   115200
 
+#define GPIO_RELAY_UP   28
+#define GPIO_RELAY_DOWN 28
+
+#define GPIO_LED_UP     25
+#define GPIO_LED_DOWN   25
+
 
 /* output pins */
 

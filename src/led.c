@@ -8,11 +8,12 @@ led_t leds[LED_COUNT] =
     { GPIO_LED_UP, 0, 0, 0, 0 },
     { GPIO_LED_DOWN, 0, 0, 0, 0 },
     { GPIO_LED_STATUS, 0, 0, 0, 0 },
-    { GPIO_LED_ERROR, 0, 0, 0, 0 }
+    { GPIO_LED_ERROR, 0, 0, 0, 0 },
+    { GPIO_LED_PICO, 0, 0, 0, 0 }
 };
 
 /* lookup function */
-led_t *led_find(uint8_t gpio)
+static led_t *led_find(uint8_t gpio)
 {
     for (int i = 0; i < LED_COUNT; i++)
     {
@@ -24,17 +25,26 @@ led_t *led_find(uint8_t gpio)
 }
 
 /* turn the led on */
-void led_on(led_t *led)
+void led_on(uint8_t gpio)
 {
-    gpio_put(led->gpio, 1);
-    led->state = 1;
+    led_activate(gpio, 0, 0);
 }
 
 /* turn the led off */
-void led_off(led_t *led)
+void led_off(uint8_t gpio)
 {
-    gpio_put(led->gpio, 0);
+    led_t *led = led_find(gpio);
+
+    if(led == NULL)
+        return;
+
+    led->interval = 0;
+    led->duration = 0;
+    led->counter = 0;
+    led->active = 0;
     led->state = 0;
+
+    gpio_put(led->gpio, 0);
 }
 
 /* 
@@ -54,7 +64,9 @@ void led_activate(uint8_t gpio, uint16_t interval, uint16_t duration)
     led->duration = duration / ISR_REPEAT_MS;
     led->counter = 0;
     led->active = 1;
-    led_on(led);
+    led->state = 1;
+
+    gpio_put(led->gpio, 1);
 }
 
 /* 
@@ -74,18 +86,21 @@ void led_tick()
             if(leds[i].interval > 0 && leds[i].counter % leds[i].interval == 0)
             {
                 if(leds[i].state) {
-                    led_off(&leds[i]);
+                    leds[i].state = 0;
+                    gpio_put(leds[i].gpio, 0);
                 } else {
-                    led_on(&leds[i]);
+                    leds[i].state = 1;
+                    gpio_put(leds[i].gpio, 1);
                 }
             }
 
             if(leds[i].duration > 0 && leds[i].counter >= leds[i].duration)
             {
-                led_off(&leds[i]);
                 leds[i].interval = 0;
                 leds[i].duration = 0;
                 leds[i].active = 0;
+                leds[i].state = 0;
+                gpio_put(leds[i].gpio, 0);
             }
         }
     }

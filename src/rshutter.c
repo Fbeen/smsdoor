@@ -12,7 +12,7 @@ void rshutter_up()
 {
     rshutter_stop();
     gpio_put(GPIO_RELAY_UP, 1);
-    gpio_put(GPIO_LED_UP, 1);
+    led_on(GPIO_LED_UP);
     relay_remaining_seconds = RELAY_TIMEOUT;
 }
 
@@ -20,13 +20,13 @@ void rshutter_down()
 {
     rshutter_stop();
     gpio_put(GPIO_RELAY_DOWN, 1);
-    gpio_put(GPIO_LED_DOWN, 1);
+    led_on(GPIO_LED_DOWN);
     relay_remaining_seconds = RELAY_TIMEOUT;
 }
 
 void overhead_down()
 {
-    led_activate(PICO_DEFAULT_LED_PIN, 500, 60000);
+    led_activate(GPIO_LED_PICO, 500, 60000);
     roldeur_down_press();
     sleep_ms(1000);
     roldeur_down_release();
@@ -35,9 +35,9 @@ void overhead_down()
 void rshutter_stop()
 {
     gpio_put(GPIO_RELAY_UP, 0);
-    gpio_put(GPIO_LED_UP, 0);
+    led_off(GPIO_LED_UP);
     gpio_put(GPIO_RELAY_DOWN, 0);
-    gpio_put(GPIO_LED_DOWN, 0);
+    led_off(GPIO_LED_DOWN);
     sleep_ms(500);
 }
 

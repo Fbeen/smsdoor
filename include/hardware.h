@@ -19,6 +19,7 @@
 #define GPIO_LED_DOWN   25
 #define GPIO_LED_STATUS 25
 #define GPIO_LED_ERROR  25
+#define GPIO_LED_PICO   PICO_DEFAULT_LED_PIN
 
 #define GPIO_OVERHEAD   99
 

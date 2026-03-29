@@ -150,7 +150,7 @@ void modem_init_step2()
     watchdog_update();
 
     printf("--- Modem init done ---\n\n");
-    led_activate(GPIO_LED_STATUS, 0, 0); 
+    led_on(GPIO_LED_STATUS); 
 }
 
 void extract_sms_number(const char *line, char *number)

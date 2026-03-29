@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "hardware.h"
 
-#define LED_COUNT 4
+#define LED_COUNT 5
 
 typedef struct
 {
@@ -19,9 +19,8 @@ typedef struct
 
 } led_t;
 
-led_t *led_find(uint8_t gpio);
-void led_on(led_t *led);
-void led_off(led_t *led);
+void led_on(uint8_t gpio);
+void led_off(uint8_t gpio);
 void led_activate(uint8_t gpio, uint16_t interval, uint16_t duration);
 void led_tick();
 

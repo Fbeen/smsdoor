@@ -1,6 +1,6 @@
 #ifndef CONSOLE_H
 #define CONSOLE_H
 
-void debug_uart_task();
+void console_uart_task();
 
 #endif

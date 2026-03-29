@@ -10,7 +10,7 @@
 
 static line_buffer_t debug_line;
 
-void debug_uart_task(void)
+void console_uart_task(void)
 {
     command_t cmd;
 
@@ -24,7 +24,7 @@ void debug_uart_task(void)
             {
                 debug_line.buffer[debug_line.index] = 0;
 
-                cmd = make_command(debug_line.buffer, SRC_CONSOLE, NULL); // Console has no sender
+                cmd = make_command(debug_line.buffer, SRC_CONSOLE, "console");
                 process_command(&cmd);
 
                 debug_line.index = 0;

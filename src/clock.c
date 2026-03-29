@@ -1,134 +1,208 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdbool.h>
+
 #include "pico/stdlib.h"
 #include "clock.h"
 #include "modem.h"
 #include "config.h"
 #include "rshutter.h"
+#include "log.h"
 
-volatile uint32_t seconds_today = 0;
-volatile bool clock_synced = false;
-volatile uint32_t last_sync_seconds = 0;
+/* ----------------------------------------------------------
+   Global clock
+   ---------------------------------------------------------- */
 
-char *datetime_to_string(struct tm *t, char *out, int maxlen)
+volatile dt_t clock_dt =
 {
-    strftime(out, maxlen, "%Y-%m-%d %H:%M:%S", t);
+    .year = 0,
+    .month = 0,
+    .day = 0,
+    .hour = 0,
+    .min = 0,
+    .sec = 0,
+    .synced = false
+};
+
+/* ----------------------------------------------------------
+   Helpers
+   ---------------------------------------------------------- */
+
+static int days_in_month(int month, int year)
+{
+    if (month == 2)
+    {
+        if ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)
+            return 29;
+        return 28;
+    }
+
+    if (month == 4 || month == 6 || month == 9 || month == 11)
+        return 30;
+
+    return 31;
 }
 
-bool get_time_from_modem(struct tm *t)
+/* ----------------------------------------------------------
+   Get datetime string
+   ---------------------------------------------------------- */
+
+bool clock_get_time(char *buf)
 {
-    char resp[256];
-
-    if (!modem_command("AT+CCLK?", resp, sizeof(resp), 2000))
+    if(!clock_dt.synced)
         return false;
 
-    char *p = strstr(resp, "+CCLK:");
-    if (!p)
-        return false;
-
-    char *q1 = strchr(p, '"');
-    if (!q1)
-        return false;
-
-    char *q2 = strchr(q1 + 1, '"');
-    if (!q2)
-        return false;
-
-    char temp[32];
-    int len = q2 - q1 - 1;
-    if (len <= 0 || len >= sizeof(temp))
-        return false;
-
-    strncpy(temp, q1 + 1, len);
-    temp[len] = 0;
-
-    // timezone verwijderen
-    char *tz = strchr(temp, '+');
-    if (tz) *tz = 0;
-
-    // temp = 25/03/24,21:43:12
-
-    if(strlen(temp) < 17)
-        return false;
-
-    int year  = (temp[0]-'0')*10 + (temp[1]-'0');
-    int month = (temp[3]-'0')*10 + (temp[4]-'0');
-    int day   = (temp[6]-'0')*10 + (temp[7]-'0');
-
-    int hour  = (temp[9]-'0')*10 + (temp[10]-'0');
-    int min   = (temp[12]-'0')*10 + (temp[13]-'0');
-    int sec   = (temp[15]-'0')*10 + (temp[16]-'0');
-
-    if ((2000 + year) < 2025)
-        return false;
-
-    t->tm_year = year + 100; // sinds 1900
-    t->tm_mon  = month - 1;
-    t->tm_mday = day;
-    t->tm_hour = hour;
-    t->tm_min  = min;
-    t->tm_sec  = sec;
+    sprintf(buf, "%02u-%02u-%04u %02u:%02u:%02u",
+            clock_dt.day,
+            clock_dt.month,
+            clock_dt.year,
+            clock_dt.hour,
+            clock_dt.min,
+            clock_dt.sec);
 
     return true;
 }
 
-uint32_t tm_to_seconds(struct tm *t)
-{
-    return t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec;
-}
+/* ----------------------------------------------------------
+   sets the time one second later
+   ---------------------------------------------------------- */
 
-/* called 10 times per second by ISR */
-void clock_tick()
+static void clock_add_second(void)
 {
-    static uint8_t div = 0;
-    div++;
+    clock_dt.sec++;
 
-    if(div >= 10)
+    if(clock_dt.sec >= 60)
     {
-        div = 0;
-        seconds_today++;
+        clock_dt.sec = 0;
+        clock_dt.min++;
 
-        /* at midnight */
-        if(seconds_today >= 86400)
+        if(clock_dt.min >= 60)
         {
-            seconds_today = 0;
-            clock_synced = false;   // nieuwe dag → opnieuw netwerktijd ophalen
+            clock_dt.min = 0;
+            clock_dt.hour++;
+
+            if(clock_dt.hour >= 24)
+            {
+                clock_dt.hour = 0;
+                clock_dt.day++;
+
+                if(clock_dt.day > days_in_month(clock_dt.month, clock_dt.year))
+                {
+                    clock_dt.day = 1;
+                    clock_dt.month++;
+
+                    if(clock_dt.month > 12)
+                    {
+                        clock_dt.month = 1;
+                        clock_dt.year++;
+                    }
+                }
+            }
         }
     }
 }
 
-/* called from main loop */
+/* ----------------------------------------------------------
+   Set clock from modem string (+CCLK or +CTZV)
+   ---------------------------------------------------------- */
+
+void clock_set_clock(char *buf)
+{
+    int yy, MM, dd, hh, mm, ss;
+
+    if (strstr(buf, "+CCLK:"))
+    {
+        if (sscanf(buf, "+CCLK: \"%2d/%2d/%2d,%2d:%2d:%2d",
+                   &yy, &MM, &dd, &hh, &mm, &ss) != 6)
+            return;
+    }
+    else if (strstr(buf, "+CTZV:"))
+    {
+        if (sscanf(buf, "+CTZV: %*[^,],%2d/%2d/%2d,%2d:%2d:%2d",
+                   &yy, &MM, &dd, &hh, &mm, &ss) != 6)
+            return;
+    }
+    else
+        return;
+
+    /* ignore invalid modem clock */
+    if (yy == 70)
+    {
+        printf("Ignoring invalid modem time\n");
+        return;
+    }
+
+    clock_dt.year  = 2000 + yy;
+    clock_dt.month = MM;
+    clock_dt.day   = dd;
+    clock_dt.hour  = hh;
+    clock_dt.min   = mm;
+    clock_dt.sec   = ss;
+
+    clock_dt.synced = true;
+
+    printf("Clock synced: %02d-%02d-%04d %02d:%02d:%02d\n",
+           dd, MM, clock_dt.year, hh, mm, ss);
+}
+
+/* ----------------------------------------------------------
+   Called from ISR (10x per second)
+   ---------------------------------------------------------- */
+
+void clock_tick()
+{
+    static uint16_t div = 0;
+    div += ISR_REPEAT_MS;
+
+    if(div >= 1000)
+    {
+        div = 0;
+        clock_add_second();
+
+        /* elke dag om 03:01 opnieuw sync */
+        if(clock_dt.hour == 3 && clock_dt.min == 1 && clock_dt.sec == 0)
+        {
+            clock_dt.synced = false;
+        }
+    }
+}
+
+/* ----------------------------------------------------------
+   Clock task (main loop)
+   ---------------------------------------------------------- */
+
 void clock_task()
 {
-    struct tm nettime;
     static uint16_t last_min = 0xFFFF;
-    uint16_t current_min = seconds_today / 60;
+    static uint8_t first_try = 2;
+    uint16_t current_min = clock_dt.hour * 60 + clock_dt.min;
 
     /* once per minute */
     if(current_min != last_min)
     {
         last_min = current_min;
 
-        /* when clock is not synced */
-        if(clock_synced)
+        if(clock_dt.synced)
         {
             /* automatic closing time */
             if(current_min == cfg.close_time)
             {
                 rshutter_down();
+                overhead_down();
                 printf("clock task: close now.\n");
+                log_add("AUTO CLOSE", "", "", true);
             }
-
-        } else {
-
-            /* try to get time from network */
-            if (get_time_from_modem(&nettime))
-            {
-                seconds_today = tm_to_seconds(&nettime);
-                clock_synced = true;
-                printf("Clock set. Current time %d:%02d\n\n", nettime.tm_hour, nettime.tm_min);
+        }
+        else
+        {
+            /* skip first run as modem still might be busy */
+            if(first_try > 0)
+                first_try--;
+            else {
+                /* try to get time from network */
+                modem_send("AT+CCLK?");
             }
-         }
+        }
     }
 }

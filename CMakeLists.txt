@@ -46,6 +46,8 @@ add_executable(smsdoor
     src/clock.c
     src/rshutter.c
     src/util.c
+    src/led.c
+    src/log.c
 )
 
 pico_set_program_name(smsdoor "smsdoor")

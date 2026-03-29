@@ -36,4 +36,20 @@ void gpio_setup()
 
     gpio_init(GPIO_LED_DOWN);
     gpio_set_dir(GPIO_LED_DOWN, GPIO_OUT);
+
+    /* overhead door */
+    gpio_init(GPIO_OVERHEAD );
+    gpio_disable_pulls(GPIO_OVERHEAD );  // important!
+    gpio_set_dir(GPIO_OVERHEAD , GPIO_IN);   // high-Z
+}
+
+void roldeur_down_press()
+{
+    gpio_set_dir(GPIO_OVERHEAD , GPIO_OUT);
+    gpio_put(GPIO_OVERHEAD , 0);   // press button
+}
+
+void roldeur_down_release()
+{
+    gpio_set_dir(GPIO_OVERHEAD , GPIO_IN);   // high-Z
 }

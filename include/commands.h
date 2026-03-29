@@ -14,7 +14,6 @@
 typedef enum
 {
     CMD_UNKNOWN = 0,
-    CMD_TEST,
     CMD_INIT,
     CMD_ADD,
     CMD_DEL,
@@ -27,6 +26,9 @@ typedef enum
     CMD_PIN,
     CMD_INFO,
     CMD_CLOSEAT,
+    CMD_AT,
+    CMD_LOG,
+    CMD_OVERHEAD,
 } command_id_t;
 
 typedef struct
@@ -51,7 +53,6 @@ command_t make_command(char *line, uint8_t source, const char *sender);
 static void send_response(command_t *cmd, char *response);
 bool        command_allowed(command_t *cmd, uint8_t level);
 void        process_command(command_t *cmd);
-static void cmd_test(command_t *cmd, char *response);
 static void cmd_init(command_t *cmd, char *response);
 static void cmd_add(command_t *cmd, char *response);
 static void cmd_del(command_t *cmd, char *response);
@@ -60,9 +61,12 @@ static void cmd_promote(command_t *cmd, char *response);
 static void cmd_demote(command_t *cmd, char *response);
 static void cmd_up(command_t *cmd, char *response);
 static void cmd_down(command_t *cmd, char *response);
+static void cmd_overhead(command_t *cmd, char *response);
 static void cmd_help(command_t *cmd, char *response);
 static void cmd_pin(command_t *cmd, char *response);
 static void cmd_info(command_t *cmd, char *response);
 static void cmd_closeat(command_t *cmd, char *response);
+static void cmd_at(command_t *cmd, char *response);
+static void cmd_log(command_t *cmd, char *response);
 
 #endif

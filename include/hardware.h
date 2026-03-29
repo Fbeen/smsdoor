@@ -17,11 +17,17 @@
 
 #define GPIO_LED_UP     25
 #define GPIO_LED_DOWN   25
+#define GPIO_LED_STATUS 25
+#define GPIO_LED_ERROR  25
 
+#define GPIO_OVERHEAD   99
 
 /* output pins */
 
 void uart_setup();
 void gpio_setup();
+
+void roldeur_down_press();
+void roldeur_down_release();
 
 #endif

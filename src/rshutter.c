@@ -3,6 +3,7 @@
 #include "rshutter.h"
 #include "hardware.h"
 #include "config.h"
+#include "led.h"
 
 static uint16_t relay_remaining_seconds = 0;
 static bool rshutter_must_stop = false;
@@ -23,6 +24,14 @@ void rshutter_down()
     relay_remaining_seconds = RELAY_TIMEOUT;
 }
 
+void overhead_down()
+{
+    led_activate(PICO_DEFAULT_LED_PIN, 500, 60000);
+    roldeur_down_press();
+    sleep_ms(1000);
+    roldeur_down_release();
+}
+
 void rshutter_stop()
 {
     gpio_put(GPIO_RELAY_UP, 0);
@@ -35,11 +44,11 @@ void rshutter_stop()
 /* called 10 times per second by ISR */
 void rshutter_tick()
 {
-    static uint8_t div = 0;
-    div++;
+    static uint16_t div = 0;
+    div += ISR_REPEAT_MS;
 
     /* once per second */
-    if(div >= 10)
+    if(div >= 1000)
     {
         div = 0;
 

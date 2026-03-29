@@ -23,8 +23,10 @@ Used for SMS commands or serial console commands like ADD, DEL, LIST */
 #define COMMAND_SIZE        32
 
 /* Timeout after which the relay is automatically turned off (seconds) */
-#define RELAY_TIMEOUT       180; 
+#define RELAY_TIMEOUT       180
 
+/* ISR time interval in milliseconds */
+#define ISR_REPEAT_MS       100
 
 #define FLASH_TOTAL_SIZE       (2 * 1024 * 1024)
 

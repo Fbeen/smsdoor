@@ -123,6 +123,10 @@ static void send_response(command_t *cmd, char *response)
 /* this is the firewall to keep unauthorized people away */
 bool command_allowed(command_t *cmd, uint8_t level)
 {
+    /* Init is a very special command and has his onwn firewall */
+    if(cmd->id == CMD_INIT)
+        return true;
+        
     /* commands from console are always approved */
     if (cmd->source == SRC_CONSOLE)
         return true;
@@ -199,7 +203,7 @@ static void cmd_init(command_t *cmd, char *response)
     {
         err = phonebook_add(cmd->sender);
         if(err == PB_OK) {
-            strcat(response, "Phonebook initialized.\nYour number has been added.");
+            strcat(response, "Phonebook initialized.\nYour number has been added. Send HELP to learn more commands");
             log_add("INIT", "", cmd->sender, true);
         } else {
             strcat(response, phonebook_strerror(err));

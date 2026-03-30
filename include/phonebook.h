@@ -6,7 +6,7 @@
 #include "config.h"
 
 #define PHONEBOOK_MAGIC   0x50424B31   // "PBK1"
-#define PHONEBOOK_VERSION 2
+#define PHONEBOOK_VERSION 3
 
 /* error codes phonebook_add function */
 #define PB_OK                          0

@@ -649,6 +649,7 @@ static void cmd_log(command_t *cmd, char *response)
         return;
     }
 
+    printf("LOG:\n");
     for (int i = 0; i < count; i++)
     {
         log_entry_t *e = log_get(i);

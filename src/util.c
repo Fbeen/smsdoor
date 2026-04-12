@@ -49,3 +49,29 @@ void get_uptime_string(char *buf)
                 hours);
     }
 }
+
+void nl2br(const char *in, char *out, size_t out_size)
+{
+    size_t i = 0;
+
+    while (*in && i < out_size - 1)
+    {
+        if (*in == '\n')
+        {
+            if (i + 4 >= out_size) break;
+
+            out[i++] = '<';
+            out[i++] = 'b';
+            out[i++] = 'r';
+            out[i++] = '>';
+        }
+        else
+        {
+            out[i++] = *in;
+        }
+
+        in++;
+    }
+
+    out[i] = '\0';
+}

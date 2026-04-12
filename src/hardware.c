@@ -22,8 +22,8 @@ void uart_setup()
 
 void gpio_setup()
 {
-    gpio_init(PICO_DEFAULT_LED_PIN);
-    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+    gpio_init(GPIO_LED_PICO);
+    gpio_set_dir(GPIO_LED_PICO, GPIO_OUT);
 
     gpio_init(GPIO_RELAY_UP);
     gpio_set_dir(GPIO_RELAY_UP, GPIO_OUT);

@@ -10,6 +10,7 @@
 #include "clock.h"
 #include "rshutter.h"
 #include "log.h"
+#include "util.h"
 
 static const command_entry_t command_table[] =
 {
@@ -514,43 +515,7 @@ static void cmd_pin(command_t *cmd, char *response)
 
 static void cmd_info(command_t *cmd, char *response)
 {
-    char uptime[32];
-    char tempbuf[32];
-
-    get_uptime_string(uptime);
-
-    strcat(response, "SMSDOOR v");
-    strcat(response, VERSION);
-    strcat(response, "\n");
-    
-    strcat(response, "Uptime: ");
-    strcat(response, uptime);
-    strcat(response, "\n");
-
-    strcat(response, "System time: ");
-    if(clock_get_time(tempbuf))
-    {
-        strcat(response, tempbuf);
-        strcat(response, "\n");
-    } else {
-        strcat(response, "NOT SET\n");
-    }
-
-    sprintf(tempbuf, "Users %d Admins %d\n", phonebook_count(), phonebook_count_admins());
-    strcat(response, tempbuf);
-
-    int h = cfg.close_time / 60;
-    int m = cfg.close_time % 60;
-
-    if(cfg.close_time == CLOSE_DISABLED) {
-        strcat(response, "Auto close time: OFF\n");
-    } else {
-        sprintf(tempbuf, "Auto close time: %d:%02d\n", h, m);
-        strcat(response, tempbuf);
-    }
-
-
-    strcat(response, "\nhttps://github.com/Fbeen/smsdoor\n");
+    get_info(response);
 }
 
 static void cmd_closeat(command_t *cmd, char *response)
@@ -662,4 +627,45 @@ static void cmd_log(command_t *cmd, char *response)
         printf("%s\n", line);
     }
     strcpy(response, "");
+}
+
+void get_info(char *out)
+{
+    char uptime[32];
+    char tempbuf[32];
+
+    get_uptime_string(uptime);
+
+    strcat(out, "SMSDOOR v");
+    strcat(out, VERSION);
+    strcat(out, "\n");
+    
+    strcat(out, "Uptime: ");
+    strcat(out, uptime);
+    strcat(out, "\n");
+
+    strcat(out, "System time: ");
+    if(clock_get_time(tempbuf))
+    {
+        strcat(out, tempbuf);
+        strcat(out, "\n");
+    } else {
+        strcat(out, "NOT SET\n");
+    }
+
+    sprintf(tempbuf, "Users %d Admins %d\n", phonebook_count(), phonebook_count_admins());
+    strcat(out, tempbuf);
+
+    int h = cfg.close_time / 60;
+    int m = cfg.close_time % 60;
+
+    if(cfg.close_time == CLOSE_DISABLED) {
+        strcat(out, "Auto close time: OFF\n");
+    } else {
+        sprintf(tempbuf, "Auto close time: %d:%02d\n", h, m);
+        strcat(out, tempbuf);
+    }
+
+
+    strcat(out, "\nhttps://github.com/Fbeen/smsdoor\n");
 }

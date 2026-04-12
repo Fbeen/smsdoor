@@ -68,5 +68,6 @@ static void cmd_info(command_t *cmd, char *response);
 static void cmd_closeat(command_t *cmd, char *response);
 static void cmd_at(command_t *cmd, char *response);
 static void cmd_log(command_t *cmd, char *response);
+void get_info(char *out);
 
 #endif

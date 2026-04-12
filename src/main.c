@@ -5,6 +5,7 @@
 #include "hardware/watchdog.h"
 #include "hardware/timer.h"
 #include "hardware/uart.h"
+#include "webserver.h"
 #include "console.h"
 #include "phonebook.h"
 #include "hardware.h"
@@ -38,7 +39,7 @@ bool timer_callback(struct repeating_timer *t)
 int main()
 {
     /* enable watchdog, pico restarts if things go wrong */
-    watchdog_enable(15000, 1);  // 15 seconds watchdog
+    // watchdog_enable(30000, 1);  // 15 seconds watchdog
 
     /* enable standard pico stuff */
     stdio_init_all();
@@ -48,6 +49,9 @@ int main()
 
     /* sets the gpio's, see hardware.c */
     gpio_setup();
+
+    /* start webserver */
+    ws_init();
 
     /* Start repeating hardware timer */
     add_repeating_timer_ms(ISR_REPEAT_MS, timer_callback, NULL, &timer);

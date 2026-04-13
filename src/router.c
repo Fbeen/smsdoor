@@ -11,6 +11,7 @@
 #include "modem.h"
 #include "util.h"
 #include "log.h"
+#include "rshutter.h"
 
 /* ===== Helper ===== */
 
@@ -90,12 +91,27 @@ bool get_query_param(const char *uri, const char *key, char *out, size_t out_siz
     return false;
 }
 
+static void exec_command(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb, char *cmdtxt)
+{
+    command_t cmd;
+    char buf[MAX_CMD_LEN];
+
+    /* safe way of string copy */
+    strncpy(buf, cmdtxt, MAX_CMD_LEN - 1);
+    buf[MAX_CMD_LEN - 1] = '\0';
+
+    cmd = make_command(buf, SRC_WEB, "web");
+    process_command(&cmd, buf);
+
+    send_text(state, pcb, buf);
+}
+
 /* ===== HANDLERS ===== */
 
 static void handle_index(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    state->file_data  = index_html_gz;
-    state->result_len = index_html_gz_len;
+    state->file_data  = index_min_html_gz;
+    state->result_len = index_min_html_gz_len;
 
     ws_send_header(pcb, state, "text/html", state->result_len, true);
     ws_send_chunk(pcb, state);
@@ -103,35 +119,22 @@ static void handle_index(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_open(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    printf("Rolluik OPEN\n");
-    send_text(state, pcb, "Rolluik gaat omhoog");
+     exec_command(state, pcb, "up");
 }
 
 static void handle_close(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    printf("Rolluik CLOSE\n");
-    send_text(state, pcb, "Rolluik gaat omlaag");
+    exec_command(state, pcb, "down");
 }
 
 static void handle_overhead(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    printf("Overhead deur CLOSE\n");
-    send_text(state, pcb, "Overheaddeur gaat dicht");
+    exec_command(state, pcb, "overhead down");
 }
 
 static void handle_info(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    // static char text[160];
-    static char html[160] = "dit komt later.";
-
-    // get_info(text);
-    // nl2br(text, html, 160);
-
-    state->file_data  = (const unsigned char*)html;
-    state->result_len = strlen(html);
-
-    ws_send_header(pcb, state, "application/json", state->result_len, false);
-    ws_send_chunk(pcb, state);
+    exec_command(state, pcb, "info");
 }
 
 /* ===== Future handlers ===== */
@@ -182,37 +185,20 @@ static void handle_users(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 static void handle_add_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
     char response[256];
-    int pos = 0;
     char nr[32];
  
     // --- parameter ophalen ---
     get_query_param(state->uri, "nr", nr, sizeof(nr));
 
-    printf(">>%s\n", nr);
+    int err = exec_cmd_add(nr, "web");
 
-    if (!nr || strlen(nr) == 0)
+    if (err == PB_OK)
     {
-        pos += snprintf(response + pos, sizeof(response) - pos, "{ \"err\": \"Missing number\" }");
+        sprintf(response, "{ \"err\": \"Ok\" }");
     }
     else
     {
-        int err = phonebook_add(nr);
-
-        if (err == PB_OK)
-        {
-            // JSON response
-            pos += snprintf(response + pos, sizeof(response) - pos, "{ \"err\": \"Ok\" }");
-
-            // zelfde gedrag als console
-            modem_send_sms(nr, "Hallo, Welkom bij de sms rolluik bediening. stuur \"Op\" om het rolluik omhoog, en \"Neer\" om het rolluik omlaag te sturen.");
-
-            log_add("ADD", nr, "web", true);
-        }
-        else
-        {
-            pos += snprintf(response + pos, sizeof(response) - pos, "{ \"err\": \"%s\" }",phonebook_strerror(err));
-            log_add("ADD", nr, "web", false);
-        }
+        sprintf(response, "{ \"err\": \"%s\" }",phonebook_strerror(err));
     }
     
     // --- response koppelen ---
@@ -226,7 +212,30 @@ static void handle_add_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_del_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    send_text(state, pcb, "Delete user");
+    char response[256];
+    char nr[32];
+ 
+    // --- parameter ophalen ---
+    get_query_param(state->uri, "nr", nr, sizeof(nr));
+
+    int err = exec_cmd_del(nr, "web");
+
+    if (err == PB_OK)
+    {
+        sprintf(response, "{ \"err\": \"Ok\" }");
+    }
+    else
+    {
+        sprintf(response, "{ \"err\": \"%s\" }",phonebook_strerror(err));
+    }
+    
+    // --- response koppelen ---
+    state->file_data  = (const unsigned char*)response;
+    state->result_len = strlen(response);
+
+    // --- header + verzenden ---
+    ws_send_header(pcb, state, "application/json", state->result_len, false);
+    ws_send_chunk(pcb, state);
 }
 
 static void handle_admin(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)

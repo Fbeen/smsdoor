@@ -3,8 +3,11 @@
 
 #include "config.h"
 
+#define MAX_CMD_LEN 160
+
 #define SRC_CONSOLE 1
 #define SRC_SMS     2
+#define SRC_WEB     3
 
 /* command levels */
 #define CMD_LEVEL_USER    0
@@ -52,7 +55,7 @@ typedef struct
 command_t make_command(char *line, uint8_t source, const char *sender);
 static void send_response(command_t *cmd, char *response);
 bool        command_allowed(command_t *cmd, uint8_t level);
-void        process_command(command_t *cmd);
+void        process_command(command_t *cmd, char *response);
 static void cmd_init(command_t *cmd, char *response);
 static void cmd_add(command_t *cmd, char *response);
 static void cmd_del(command_t *cmd, char *response);
@@ -68,6 +71,8 @@ static void cmd_info(command_t *cmd, char *response);
 static void cmd_closeat(command_t *cmd, char *response);
 static void cmd_at(command_t *cmd, char *response);
 static void cmd_log(command_t *cmd, char *response);
-void get_info(char *out);
+
+int exec_cmd_add(const char *phonenr, const char *who);
+int exec_cmd_del(const char *phonenr, const char *who);
 
 #endif

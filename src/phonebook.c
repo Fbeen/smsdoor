@@ -289,6 +289,8 @@ const char *phonebook_strerror(int err)
             return "Phonebook save failed";
         case ERR_PB_NUMBER_NOT_FOUND:
             return "PNumber not found";
+        case ERR_PB_LAST_ADMIN:
+            return "Cannot remove last admin";
         default:
             return "Unknown error";
     }

@@ -9,7 +9,6 @@ led_t leds[LED_COUNT] =
     { GPIO_LED_DOWN, 0, 0, 0, 0 },
     { GPIO_LED_STATUS, 0, 0, 0, 0 },
     { GPIO_LED_ERROR, 0, 0, 0, 0 },
-    { GPIO_LED_PICO, 0, 0, 0, 0 }
 };
 
 /* lookup function */

@@ -12,6 +12,7 @@ static line_buffer_t debug_line;
 
 void console_uart_task(void)
 {
+    char response[MAX_CMD_LEN];
     command_t cmd;
 
     while (uart_is_readable(UART_DEBUG))
@@ -25,7 +26,7 @@ void console_uart_task(void)
                 debug_line.buffer[debug_line.index] = 0;
 
                 cmd = make_command(debug_line.buffer, SRC_CONSOLE, "console");
-                process_command(&cmd);
+                process_command(&cmd, response);
 
                 debug_line.index = 0;
             }

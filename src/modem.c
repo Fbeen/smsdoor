@@ -180,6 +180,7 @@ void extract_sms_number(const char *line, char *number)
 void modem_uart_task()
 {
     command_t cmd;
+    char response[MAX_CMD_LEN];
     static bool waiting_for_cmgr_text = false;
     static char sms_text[COMMAND_SIZE];
     static int sms_idx = 0;
@@ -224,7 +225,7 @@ void modem_uart_task()
                     {
                         // SMS compleet → command verwerken
                         cmd = make_command(sms_text, SRC_SMS, sms_number);
-                        process_command(&cmd);
+                        process_command(&cmd, response);
 
                         waiting_for_cmgr_text = false;
 

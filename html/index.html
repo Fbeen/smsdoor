@@ -1,112 +1,524 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
-<head>
-<meta charset=UTF-8>
-<meta name=viewport content="width=device-width,initial-scale=1">
-<title>SMSDOOR</title>
-<style>body{margin:0;font-family:Arial,sans-serif;background:#111;color:#eee}.header{text-align:center;padding:15px;font-size:28px;font-weight:700}.header .sms{color:#00c853}.header .door{color:#00b0ff;font-size:60%}.section{display:none;padding:15px;padding-bottom:70px}.section.active{display:block}.title-green{color:#00c853;margin:15px 0}.title-blue{color:#00b0ff;margin:15px 0}button{background:#222;color:#fff;border:1px solid #444;padding:10px;margin:8px 0;width:100%;border-radius:6px;font-size:16px}button.disabled{color:#333}button.red:active{background-color:#b71c1c;color:#fff}button.green:active{background-color:green;color:#fff}button:active{background-color:#4caf50;color:#fff}.row{display:flex;gap:10px}.col{flex:1;margin:0 10px}.status{display:none;background:#222;color:#00b0ff;padding:10px;margin-top:10px;border-radius:6px}.status.show{display:block}.info{background:#181818;padding:10px;margin-top:10px;border-radius:6px;font-size:14px}.info b{color:#00c853}.user{display:flex;justify-content:space-between;align-items:center;background:#222;padding:8px;margin:5px 0;border-radius:6px}.icon-btn{width:32px;height:32px;padding:4px;margin-left:4px}.btn-del{background:#b71c1c}.btn-adm{background:#1565c0}.console{white-space:pre-line;background:#000;height:45vh;overflow-y:auto;padding:10px;font-family:monospace;font-size:13px;border-radius:6px}.console-input{display:flex;margin-top:10px}.console-input form{display:flex;width:100%}.console-input input{height:18px;margin-top:9px;flex:1;padding:10px;font-size:16px;background:#333;border:1px solid #aaa;border-radius:6px;color:#fff}.console-input button{width:70px;margin-left:5px}.navbar{position:fixed;bottom:0;width:100%;display:flex}.navbar button{width:25%;margin:0;border-radius:0;border:none;border-top:1px solid #444;background:#1a1a1a;font-size:11px;padding:6px 0}.navbar button.active{background:#00c853}.navbar svg{display:block;margin:auto}svg{fill:white}</style>
-<script>function showSection(e){document.querySelectorAll(".section").forEach((e=>e.classList.remove("active"))),document.getElementById(e).classList.add("active"),document.querySelectorAll(".navbar button").forEach((e=>e.classList.remove("active"))),document.getElementById("btn_"+e).classList.add("active")}</script>
-</head>
-<body>
-<svg xmlns=http://www.w3.org/2000/svg style=display:none>
-<symbol id=icon-home viewBox="0 0 24 24">
-<path d="M3 12 L12 4 L21 12 V20 H14 V14 H10 V20 H3 Z"/>
-</symbol>
-<symbol id=icon-users viewBox="0 0 24 24">
-<circle cx=8 cy=8 r=3 />
-<circle cx=16 cy=8 r=3 />
-<path d="M3 20 C3 16,13 16,13 20"/>
-<path d="M11 20 C11 16,21 16,21 20"/>
-</symbol>
-<symbol id=icon-console viewBox="0 0 24 24">
-<path d="M3 5 H21 V19 H3 Z"/>
-<path d="M6 9 L10 12 L6 15"/>
-<path d="M12 15 H18"/>
-</symbol>
-<symbol id=icon-help viewBox="0 0 24 24">
-<path d="M3 5 H10 V19 H3 Z"/>
-<path d="M14 5 H21 V19 H14 Z"/>
-<path d="M10 5 C12 5 12 19 10 19"/>
-</symbol>
-<svg id=icon-del data-name="Layer 1" viewBox="0 0 110.61 122.88"><title>trash</title><path d=M39.27,58.64a4.74,4.74,0,1,1,9.47,0V93.72a4.74,4.74,0,1,1-9.47,0V58.64Zm63.6-19.86L98,103a22.29,22.29,0,0,1-6.33,14.1,19.41,19.41,0,0,1-13.88,5.78h-45a19.4,19.4,0,0,1-13.86-5.78l0,0A22.31,22.31,0,0,1,12.59,103L7.74,38.78H0V25c0-3.32,1.63-4.58,4.84-4.58H27.58V10.79A10.82,10.82,0,0,1,38.37,0H72.24A10.82,10.82,0,0,1,83,10.79v9.62h23.35a6.19,6.19,0,0,1,1,.06A3.86,3.86,0,0,1,110.59,24c0,.2,0,.38,0,.57V38.78Zm-9.5.17H17.24L22,102.3a12.82,12.82,0,0,0,3.57,8.1l0,0a10,10,0,0,0,7.19,3h45a10.06,10.06,0,0,0,7.19-3,12.8,12.8,0,0,0,3.59-8.1L93.37,39ZM71,20.41V12.05H39.64v8.36ZM61.87,58.64a4.74,4.74,0,1,1,9.47,0V93.72a4.74,4.74,0,1,1-9.47,0V58.64Z /></svg>
-<symbol id=icon-add viewBox="0 0 24 24">
-<path d="M12 5 V19"/>
-<path d="M5 12 H19"/>
-</symbol>
-<symbol id=icon-admin viewBox="0 0 24 24">
-<path d="M12 2 L15 9 L22 9 L16 14 L18 22 L12 17 L6 22 L8 14 L2 9 L9 9 Z"/>
-</symbol>
-<symbol id=icon-send viewBox="0 0 24 24">
-<path d="M2 12 L22 2 L16 22 L11 13 Z"/>
-</symbol>
-</svg>
-<div class=header>
-<span class=sms>SMS</span><span class=door>DOOR</span>
-</div>
-<div id=home class="section active">
-<div class=row>
-<div class=col>
-<h3 class=title-green>Rolluik</h3>
-<button onclick='sendCmd("/open")'>UP</button>
-<button class=red onclick='sendCmd("/close")'>DOWN</button>
-</div>
-<div class=col>
-<h3 class=title-blue>Overheaddeur</h3>
-<button class=disabled>UP</button>
-<button class=red onclick='sendCmd("/overhead")'>DOWN</button>
-</div>
-</div>
-<div class=status id=status></div>
-<div class=info>
-<b>INFO:</b>
-<div id=infohtml>Loading...</div>
-</div>
-</div>
-<div id=users class=section>
-<div id=userlist></div>
-<div class=console-input>
-<form onsubmit="return addPhone(),!1">
-<input name=phonenr placeholder=+31612345678>
-<button type=submit>Add</button>
-</form>
-</div>
-</div>
-<div id=settings class=section>
-<div id=console class=console>
-SMSDOOR console ready...
-</div>
-<div class=console-input>
-<form onsubmit="return consoleCommand(),!1">
-<input name=command placeholder=Command>
-<button type=submit><svg width=16 height=16><use href=#icon-send /></svg></button>
-</form>
-</div>
-</div>
-<div id=help class=section>
-<h3>Help</h3>
-SSID wijzigen → SSID &lt;naam&gt;<br><br>
-Wachtwoord wijzigen → PWD &lt;password&gt;<br><br>
-Pin wijzigen → PIN &lt;pincode&gt;<br><br>
-AT commands via console
-</div>
-<div class=navbar>
-<button id=btn_home class=active onclick='showSection("home")'>
-<svg width=20 height=20><use href=#icon-home /></svg>
-Home
-</button>
-<button id=btn_users onclick='showSection("users")'>
-<svg width=20 height=20><use href=#icon-users /></svg>
-Users
-</button>
-<button id=btn_settings onclick='showSection("settings")'>
-<svg width=20 height=20><use href=#icon-console /></svg>
-Console
-</button>
-<button id=btn_help onclick='showSection("help")'>
-<svg width=20 height=20><use href=#icon-help /></svg>
-Help
-</button>
-</div>
-<script>let statusTimer=null,lastId=0;function validPhone(t){return/^\+?[0-9]{9,15}$/.test(t)}function apiJson(t,e){fetch(t).then((t=>t.json())).then((t=>"Ok"===t.err?e():alert(t.err)))}function initEventListeners(){document.getElementById("users").addEventListener("click",(t=>{let e=t.target.closest(".btn-del");if(e)return apiJson("/del?nr="+e.dataset.id,updateUsers);let n=t.target.closest(".btn-adm");return n?apiJson("/adm?nr="+n.dataset.id,updateUsers):void 0})),document.addEventListener("touchstart",(function(){}),!0)}function updateInfo(){fetch("/info").then((t=>t.text())).then((t=>infohtml.innerHTML=t)).catch((()=>infohtml.innerHTML="Status error"))}function updateUsers(){fetch("/users").then((t=>t.json())).then((t=>{let e="";t.users.forEach(((t,n)=>{e+=`<div class="user">\n                        <div>\n                            ${t.nr}${t.admin?" *":""}\n                        </div>\n                        <div>\n                            <button class="icon-btn btn-del" data-id="${n}"><svg width="16" height="16"><use href="#icon-del"/></svg></button>\n                            <button class="icon-btn btn-adm" data-id="${n}"><svg width="16" height="16"><use href="#icon-admin"/></svg></button>\n                        </div>\n                    </div>`})),userlist.innerHTML=e})).catch((()=>userlist.innerHTML="Status error"))}function sendCmd(t){fetch(t).then((t=>t.text())).then(showStatus).catch((()=>showStatus("Command failed")))}function showStatus(t){const e=document.getElementById("status");e.textContent=t,e.classList.add("show"),statusTimer&&clearTimeout(statusTimer),statusTimer=setTimeout((()=>{e.classList.remove("show")}),5e3)}function addPhone(){let t=document.querySelector('[name="phonenr"]');fetch("/add?nr="+encodeURIComponent(t.value)).then((t=>t.json())).then((e=>{"Ok"===e.err?(t.value="",updateUsers()):alert(e.err)}))}function appendConsole(t){let e=document.querySelector(".console");e.textContent+=t,e.scrollTop=e.scrollHeight}function initConsole(){fetch("/console/latest").then((t=>t.json())).then((t=>{lastId=t.lastId,consoleLoop()}))}function consoleLoop(){fetch("/console?last="+lastId).then((t=>t.json())).then((t=>{t.logs.forEach((t=>{appendConsole(t.text),lastId=t.id}))})).catch((()=>{})).finally((()=>{consoleLoop()}))}function consoleCommand(){let t=document.querySelector('[name="command"]'),e=t.value;fetch("/console/cmd?c="+encodeURIComponent(e)).then((t=>t.text())).then((t=>{appendConsole("> "+e+"\n")})),t.value=""}window.addEventListener("load",(()=>{initEventListeners(),updateInfo(),updateUsers(),setInterval(updateInfo,6e4),initConsole()}))</script>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SMSDOOR</title>
+
+        <style>
+            body {
+                margin: 0;
+                font-family: Arial, sans-serif;
+                background: #111;
+                color: #eee;
+            }
+
+            /* Header */
+            .header {
+                text-align: center;
+                padding: 15px;
+                font-size: 28px;
+                font-weight: bold;
+            }
+
+            .header .sms {
+                color: #00c853;
+            }
+            .header .door {
+                color: #00b0ff;
+                font-size: 60%;
+            }
+
+            /* Sections */
+            .section {
+                display: none;
+                padding: 15px;
+                padding-bottom: 70px;
+            }
+
+            .section.active {
+                display: block;
+            }
+
+            /* Titles */
+            .title-green {
+                color: #00c853;
+                margin: 15px 0;
+            }
+
+            .title-blue {
+                color: #00b0ff;
+                margin: 15px 0;
+            }
+
+            /* Buttons */
+            button {
+                background: #222;
+                color: #fff;
+                border: 1px solid #444;
+                padding: 10px;
+                margin: 8px 0;
+                width: 100%;
+                border-radius: 6px;
+                font-size: 16px;
+            }
+            button.disabled {
+                color: #333;
+            }
+            button.red:active {
+                background-color: #b71c1c;
+                color: white;
+            }
+
+            button.green:active {
+                background-color: green;
+                color: white;
+            }
+            button:active {
+                background-color: #4CAF50;
+                color: white;
+            }
+
+            /* Columns */
+            .row {
+                display: flex;
+                gap: 10px;
+            }
+
+            .col {
+                flex: 1;
+                margin: 0 10px;
+            }
+
+            /* Status / Info */
+            .status {
+                display: none;
+                background: #222;
+                color: #00b0ff;
+                padding: 10px;
+                margin-top: 10px;
+                border-radius: 6px;
+            }
+            .status.show {
+                display: block;
+            }
+
+            .info {
+                background: #181818;
+                padding: 10px;
+                margin-top: 10px;
+                border-radius: 6px;
+                font-size: 14px;
+            }
+
+            .info b {
+                color: #00c853;
+            }
+
+            /* Users */
+            .user {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                background: #222;
+                padding: 8px;
+                margin: 5px 0;
+                border-radius: 6px;
+            }
+
+            .icon-btn {
+                width: 32px;
+                height: 32px;
+                padding: 4px;
+                margin-left: 4px;
+            }
+
+            .btn-del {
+                background: #b71c1c;
+            }
+            .btn-adm {
+                background: #1565c0;
+            }
+
+            /* Console */
+            .console {
+                white-space: pre-line;
+                background: #000;
+                height: 45vh;
+                overflow-y: auto;
+                padding: 10px;
+                font-family: monospace;
+                font-size: 13px;
+                border-radius: 6px;
+            }
+
+            .console-input {
+                display: flex;
+                margin-top: 10px;
+            }
+
+            .console-input form {
+                display: flex;
+                width: 100%;
+            }
+            
+            .console-input input {
+                height: 18px;
+                margin-top: 9px;
+                flex: 1;
+                padding: 10px;
+                font-size: 16px;
+                background: #333;
+                border: 1px solid #aaa;
+                border-radius: 6px;
+                color: #fff;
+            }
+
+            .console-input button {
+                width: 70px;
+                margin-left: 5px;
+            }
+
+            /* Navbar */
+            .navbar {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                display: flex;
+            }
+
+            .navbar button {
+                width: 25%;
+                margin: 0;
+                border-radius: 0;
+                border: none;
+                border-top: 1px solid #444;
+                background: #1a1a1a;
+                font-size: 11px;
+                padding: 6px 0;
+            }
+
+            .navbar button.active {
+                background: #00c853;
+            }
+
+            .navbar svg {
+                display: block;
+                margin: auto;
+            }
+
+            /* Icons */
+            svg {
+                fill: white;
+            }
+        </style>
+
+        <script>
+            function showSection(id) {
+                let sections = document.querySelectorAll('.section');
+                sections.forEach(s => s.classList.remove('active'));
+
+                document.getElementById(id).classList.add('active');
+
+                let buttons = document.querySelectorAll('.navbar button');
+                buttons.forEach(b => b.classList.remove('active'));
+
+                document.getElementById("btn_" + id).classList.add('active');
+            }
+        </script>
+    </head>
+
+    <body>
+
+        <!-- ICON SET -->
+        <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="icon-home" viewBox="0 0 24 24">
+        <path d="M3 12 L12 4 L21 12 V20 H14 V14 H10 V20 H3 Z"/>
+    </symbol>
+
+    <symbol id="icon-users" viewBox="0 0 24 24">
+        <circle cx="8" cy="8" r="3"/>
+        <circle cx="16" cy="8" r="3"/>
+        <path d="M3 20 C3 16,13 16,13 20"/>
+        <path d="M11 20 C11 16,21 16,21 20"/>
+    </symbol>
+
+    <symbol id="icon-console" viewBox="0 0 24 24">
+        <path d="M3 5 H21 V19 H3 Z"/>
+        <path d="M6 9 L10 12 L6 15"/>
+        <path d="M12 15 H18"/>
+    </symbol>
+
+    <symbol id="icon-help" viewBox="0 0 24 24">
+        <path d="M3 5 H10 V19 H3 Z"/>
+        <path d="M14 5 H21 V19 H14 Z"/>
+        <path d="M10 5 C12 5 12 19 10 19"/>
+    </symbol>
+
+    <svg id="icon-del" data-name="Layer 1" viewBox="0 0 110.61 122.88"><title>trash</title><path d="M39.27,58.64a4.74,4.74,0,1,1,9.47,0V93.72a4.74,4.74,0,1,1-9.47,0V58.64Zm63.6-19.86L98,103a22.29,22.29,0,0,1-6.33,14.1,19.41,19.41,0,0,1-13.88,5.78h-45a19.4,19.4,0,0,1-13.86-5.78l0,0A22.31,22.31,0,0,1,12.59,103L7.74,38.78H0V25c0-3.32,1.63-4.58,4.84-4.58H27.58V10.79A10.82,10.82,0,0,1,38.37,0H72.24A10.82,10.82,0,0,1,83,10.79v9.62h23.35a6.19,6.19,0,0,1,1,.06A3.86,3.86,0,0,1,110.59,24c0,.2,0,.38,0,.57V38.78Zm-9.5.17H17.24L22,102.3a12.82,12.82,0,0,0,3.57,8.1l0,0a10,10,0,0,0,7.19,3h45a10.06,10.06,0,0,0,7.19-3,12.8,12.8,0,0,0,3.59-8.1L93.37,39ZM71,20.41V12.05H39.64v8.36ZM61.87,58.64a4.74,4.74,0,1,1,9.47,0V93.72a4.74,4.74,0,1,1-9.47,0V58.64Z"/></svg>
+
+    <symbol id="icon-add" viewBox="0 0 24 24">
+        <path d="M12 5 V19"/>
+        <path d="M5 12 H19"/>
+    </symbol>
+
+    <symbol id="icon-admin" viewBox="0 0 24 24">
+        <path d="M12 2 L15 9 L22 9 L16 14 L18 22 L12 17 L6 22 L8 14 L2 9 L9 9 Z"/>
+    </symbol>
+
+    <symbol id="icon-send" viewBox="0 0 24 24">
+        <path d="M2 12 L22 2 L16 22 L11 13 Z"/>
+    </symbol>
+    </svg>
+
+    <!-- HEADER -->
+    <div class="header">
+        <span class="sms">SMS</span><span class="door">DOOR</span>
+    </div>
+
+    <!-- HOME -->
+    <div id="home" class="section active">
+        <div class="row">
+            <div class="col">
+                <h3 class="title-green">Rolluik</h3>
+                <button onclick="sendCmd('/open')">UP</button>
+                <button class="red" onclick="sendCmd('/close')">DOWN</button>
+            </div>
+
+            <div class="col">
+                <h3 class="title-blue">Overheaddeur</h3>
+                <button class="disabled">UP</button>
+                <button class="red" onclick="sendCmd('/overhead')">DOWN</button>
+            </div>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="info">
+            <b>INFO:</b>
+            <div id="infohtml">Loading...</div>
+        </div>
+    </div>
+
+    <!-- USERS -->
+    <div id="users" class="section">
+        
+        <div id="userlist"></div>
+        
+        <div class="console-input">
+            <form onsubmit="addPhone(); return false;">
+                <input name="phonenr" type="text" placeholder="+31612345678">
+                <button type="submit">Add</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- CONSOLE -->
+    <div id="settings" class="section">
+        <div id="console" class="console">
+            SMSDOOR console ready...
+        </div>
+
+        <div class="console-input">
+            <form onsubmit="consoleCommand(); return false;">
+                <input name="command" type="text" placeholder="Command">
+                <button type="submit"><svg width="16" height="16"><use href="#icon-send"/></svg></button>
+            </form>
+        </div>
+    </div>
+
+    <!-- HELP -->
+    <div id="help" class="section">
+        <h3>Help</h3>
+        SSID wijzigen → SSID &lt;naam&gt;<br><br>
+        Wachtwoord wijzigen → PWD &lt;password&gt;<br><br>
+        Pin wijzigen → PIN &lt;pincode&gt;<br><br>
+        AT commands via console
+    </div>
+
+    <!-- NAVBAR -->
+    <div class="navbar">
+        <button id="btn_home" class="active" onclick="showSection('home')">
+            <svg width="20" height="20"><use href="#icon-home"/></svg>
+            Home
+        </button>
+
+        <button id="btn_users" onclick="showSection('users')">
+            <svg width="20" height="20"><use href="#icon-users"/></svg>
+            Users
+        </button>
+
+        <button id="btn_settings" onclick="showSection('settings')">
+            <svg width="20" height="20"><use href="#icon-console"/></svg>
+            Console
+        </button>
+
+        <button id="btn_help" onclick="showSection('help')">
+            <svg width="20" height="20"><use href="#icon-help"/></svg>
+            Help
+        </button>
+    </div>
+
+    <script>
+    let statusTimer = null;
+    let lastId = 0;
+
+    window.addEventListener("load", () => {
+        initEventListeners();
+        updateInfo();
+        updateUsers();
+        setInterval(updateInfo, 60000);
+        initConsole();
+    });
+    
+    function validPhone(nr)
+    {
+        return /^\+?[0-9]{9,15}$/.test(nr);
+    }
+
+    function apiJson(url, ok)
+    {
+        fetch(url)
+            .then(r => r.json())
+            .then(d => d.err === "Ok" ? ok() : alert(d.err));
+    }
+
+    function initEventListeners()
+    {
+        document.getElementById("users").addEventListener("click", e => {
+            let del = e.target.closest(".btn-del");
+            if (del) {
+                const nr = del.dataset.id;
+                return apiJson("/del?nr=" + encodeURIComponent(nr), updateUsers);
+            }
+
+            let adm = e.target.closest(".btn-adm");
+            if (adm) {
+                const nr = adm.dataset.id;
+                return apiJson("/adm?nr=" + encodeURIComponent(nr), updateUsers);
+            }
+        });
+
+        document.addEventListener("touchstart", function(){}, true);
+    }
+
+    function updateInfo()
+    {
+        fetch("/info")
+            .then(r => r.text())
+            .then(html => infohtml.innerHTML = `<pre>${html}</pre>`)
+            .catch(() => infohtml.innerHTML = "<pre>Status error</pre>");
+    }
+
+    function updateUsers()
+    {
+        fetch("/users")
+            .then(r => r.json())
+            .then(data => {
+                let html = ``;
+
+                data.users.forEach((u, i) => {
+                    html += `<div class="user">
+                        <div>
+                            ${u.nr}${u.admin ? " *" : ""}
+                        </div>
+                        <div>
+                            <button class="icon-btn btn-del" data-id="${u.nr}"><svg width="16" height="16"><use href="#icon-del"/></svg></button>
+                            <button class="icon-btn btn-adm" data-id="${u.nr}"><svg width="16" height="16"><use href="#icon-admin"/></svg></button>
+                        </div>
+                    </div>`;
+                });
+                
+                userlist.innerHTML = html;
+            })
+            .catch(() => userlist.innerHTML = "Status error");
+    }
+
+    function sendCmd(url)
+    {
+        fetch(url)
+            .then(r => r.text())
+            .then(showStatus)
+            .catch(() => showStatus("Command failed"));
+    }
+
+    function showStatus(msg)
+    {
+        const el = document.getElementById("status");
+
+        el.textContent = msg;
+        el.classList.add("show");
+
+        if (statusTimer) clearTimeout(statusTimer);
+
+        statusTimer = setTimeout(() => {
+            el.classList.remove("show");
+        }, 5000);
+    }
+
+    function addPhone()
+    {
+        let p = document.querySelector('[name="phonenr"]');
+        
+        fetch("/add?nr=" + encodeURIComponent(p.value))
+            .then(r => r.json())
+            .then(d => {
+                if (d.err === "Ok") {
+                    p.value = "";
+                    updateUsers();
+                } else {
+                    alert(d.err);
+                }
+            });
+    }
+    
+    function appendConsole(text)
+    {
+        let c = document.querySelector('.console');
+        c.textContent += text;
+        c.scrollTop = c.scrollHeight;
+    }
+
+    function initConsole()
+    {
+        fetch("/console/latest")
+            .then(r => r.json())
+            .then(data => {
+                lastId = data.lastId;
+                consoleLoop();   // daarna pas starten
+            });
+    }
+
+    function consoleLoop()
+    {
+        fetch("/console?last=" + lastId)
+            .then(r => r.json())
+            .then(data => {
+                data.logs.forEach(log => {
+                    appendConsole(log.text);
+                    lastId = log.id;
+                });
+            })
+            .catch(() => {})
+            .finally(() => {
+                consoleLoop();
+            });
+    }
+
+    function consoleCommand()
+    {
+        let p = document.querySelector('[name="command"]');
+        let cmd = p.value;
+
+        fetch("/console/cmd?c=" + encodeURIComponent(cmd))
+            .then(r => r.text())
+            .then(t => {
+                appendConsole("> " + cmd + "\n");
+            });
+
+        p.value = "";
+    }
+    </script>
+
 </body>
 </html>

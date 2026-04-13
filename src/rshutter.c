@@ -26,7 +26,7 @@ void rshutter_down()
 
 void overhead_down()
 {
-    led_activate(GPIO_LED_PICO, 500, 60000);
+    led_activate(GPIO_LED_DOWN, 500, 60000);
     roldeur_down_press();
     sleep_ms(1000);
     roldeur_down_release();

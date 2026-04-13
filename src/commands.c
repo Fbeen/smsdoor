@@ -11,6 +11,8 @@
 #include "rshutter.h"
 #include "log.h"
 #include "util.h"
+#include "hardware.h"
+#include "led.h"
 
 static const command_entry_t command_table[] =
 {
@@ -128,40 +130,48 @@ bool command_allowed(command_t *cmd, uint8_t level)
     if(cmd->id == CMD_INIT)
         return true;
         
-    /* commands from console are always approved */
-    if (cmd->source == SRC_CONSOLE)
+    /* commands from console or web are always approved */
+    if (cmd->source == SRC_CONSOLE || cmd->source == SRC_WEB)
         return true;
 
     /* command comes from sms */
 
     /* deny 'console only' commands */
-    if (level == CMD_LEVEL_CONSOLE)
+    if (level == CMD_LEVEL_CONSOLE) {
+        led_activate(GPIO_LED_ERROR, 200, 600);
         return false;
+    }
 
     /* deny unknown senders */
-    if (strlen(cmd->sender) == 0)
+    if (strlen(cmd->sender) == 0) {
+        led_activate(GPIO_LED_ERROR, 200, 600);
         return false;
+    }
 
     /* deny senders that are not in the phonebook */
-    if (!phonebook_exists(cmd->sender))
+    if (!phonebook_exists(cmd->sender)) {
+        led_activate(GPIO_LED_ERROR, 200, 600);
         return false;
+    }
 
     /* deny 'admin only' commands for normal users */
     if (level == CMD_LEVEL_ADMIN)
     {
-        if (!phonebook_is_admin(cmd->sender))
+        if (!phonebook_is_admin(cmd->sender)) {
+            led_activate(GPIO_LED_ERROR, 200, 600);
             return false;
+        }
     }
 
     return true;
 }
 
 /* processes a command that is received from sms or console */
-void process_command(command_t *cmd)
+void process_command(command_t *cmd, char *response)
 {
-    char response[160];
-
     const command_entry_t *entry = command_find_by_id(cmd->id);
+
+    printf("ID: %d\n", cmd->id);
 
     if (!entry)
     {
@@ -215,18 +225,15 @@ static void cmd_init(command_t *cmd, char *response)
 
 static void cmd_add(command_t *cmd, char *response)
 {
-    int err = phonebook_add(cmd->args);
+    int err = exec_cmd_add(cmd->args, cmd->sender);
 
     if (err == PB_OK)
     {
         strcat(response, "Number added");
-        modem_send_sms(cmd->args, "Hallo, Welkom bij de sms rolluik bediening. stuur \"Op\" om het rolluik omhoog, en \"Neer\" om het rolluik omlaag te sturen.");
 
-        log_add("ADD", cmd->args, cmd->sender, true);
         return;
     }
     
-    log_add("ADD", cmd->args, cmd->sender, false);
     strcat(response, phonebook_strerror(err));
 }
 
@@ -234,12 +241,6 @@ static void cmd_del(command_t *cmd, char *response)
 {
     char number[PHONENR_SIZE];
     char sender[PHONENR_SIZE];
-
-    if (!phone_normalize(number, cmd->args))
-    {
-        strcat(response, "Invalid number");
-        return;
-    }
 
     phone_normalize(sender, cmd->sender);
 
@@ -250,23 +251,14 @@ static void cmd_del(command_t *cmd, char *response)
         return;
     }
 
-    /* Als admin verwijderd wordt, check of laatste admin */
-    if (phonebook_is_admin(number))
-    {
-        if (phonebook_count_admins() <= 1)
-        {
-            strcat(response, "Cannot delete last admin");
-            return;
-        }
-    }
+    int err = exec_cmd_del(number, sender);
 
-    int r = phonebook_remove(number);
-    if (r == PB_OK) {
+    log_add("DEL", number, cmd->sender, err == PB_OK);
+
+    if (err == PB_OK) {
         strcat(response, "Number removed");
-        log_add("DEL", number, cmd->sender, true);
     } else {
-        strcat(response, phonebook_strerror(r));
-        log_add("DEL", number, cmd->sender, false);
+        strcat(response, phonebook_strerror(err));
     }
 }
 
@@ -393,6 +385,8 @@ static void cmd_overhead(command_t *cmd, char *response)
     str_trim(cmd->args);
     str_to_upper(cmd->args);
 
+    printf(">>%s (%u)\n", cmd->args, strlen(cmd->args));
+
     for (int i = 0; i < CLOSE_WORDS_COUNT; i++)
     {
         if (strcmp(cmd->args, close_words[i]) == 0)
@@ -515,7 +509,43 @@ static void cmd_pin(command_t *cmd, char *response)
 
 static void cmd_info(command_t *cmd, char *response)
 {
-    get_info(response);
+    char uptime[32];
+    char tempbuf[32];
+
+    get_uptime_string(uptime);
+
+    strcat(response, "SMSDOOR v");
+    strcat(response, VERSION);
+    strcat(response, "\n");
+    
+    strcat(response, "Uptime: ");
+    strcat(response, uptime);
+    strcat(response, "\n");
+
+    strcat(response, "System time: ");
+    if(clock_get_time(tempbuf))
+    {
+        strcat(response, tempbuf);
+        strcat(response, "\n");
+    } else {
+        strcat(response, "NOT SET\n");
+    }
+
+    sprintf(tempbuf, "Users %d Admins %d\n", phonebook_count(), phonebook_count_admins());
+    strcat(response, tempbuf);
+
+    int h = cfg.close_time / 60;
+    int m = cfg.close_time % 60;
+
+    if(cfg.close_time == CLOSE_DISABLED) {
+        strcat(response, "Auto close time: OFF\n");
+    } else {
+        sprintf(tempbuf, "Auto close time: %d:%02d\n", h, m);
+        strcat(response, tempbuf);
+    }
+
+
+    strcat(response, "\nhttps://github.com/Fbeen/smsdoor\n");
 }
 
 static void cmd_closeat(command_t *cmd, char *response)
@@ -629,43 +659,49 @@ static void cmd_log(command_t *cmd, char *response)
     strcpy(response, "");
 }
 
-void get_info(char *out)
+
+/* ----------------------------------------------------------
+   COMMAND functions
+   ---------------------------------------------------------- */
+
+int exec_cmd_add(const char *phonenr, const char *who)
 {
-    char uptime[32];
-    char tempbuf[32];
+    int err = phonebook_add(phonenr);
 
-    get_uptime_string(uptime);
-
-    strcat(out, "SMSDOOR v");
-    strcat(out, VERSION);
-    strcat(out, "\n");
-    
-    strcat(out, "Uptime: ");
-    strcat(out, uptime);
-    strcat(out, "\n");
-
-    strcat(out, "System time: ");
-    if(clock_get_time(tempbuf))
+    if (err == PB_OK)
     {
-        strcat(out, tempbuf);
-        strcat(out, "\n");
-    } else {
-        strcat(out, "NOT SET\n");
+        modem_send_sms(phonenr, "Hallo, Welkom bij de sms rolluik bediening. stuur \"Op\" om het rolluik omhoog, en \"Neer\" om het rolluik omlaag te sturen.");
+        log_add("ADD", phonenr, who, true);
+
+        return PB_OK;
+    }
+    
+    log_add("ADD", phonenr, who, false);
+
+    return err;
+}
+
+int exec_cmd_del(const char *phonenr, const char *who)
+{
+    char number[PHONENR_SIZE];
+
+    if (!phone_normalize(number, phonenr))
+    {
+        return ERR_PB_INVALID_NUMBER;
     }
 
-    sprintf(tempbuf, "Users %d Admins %d\n", phonebook_count(), phonebook_count_admins());
-    strcat(out, tempbuf);
-
-    int h = cfg.close_time / 60;
-    int m = cfg.close_time % 60;
-
-    if(cfg.close_time == CLOSE_DISABLED) {
-        strcat(out, "Auto close time: OFF\n");
-    } else {
-        sprintf(tempbuf, "Auto close time: %d:%02d\n", h, m);
-        strcat(out, tempbuf);
+    /* Als admin verwijderd wordt, check of laatste admin */
+    if (phonebook_is_admin(number))
+    {
+        if (phonebook_count_admins() <= 1)
+        {
+            return ERR_PB_LAST_ADMIN;
+        }
     }
 
+    int err = phonebook_remove(number);
 
-    strcat(out, "\nhttps://github.com/Fbeen/smsdoor\n");
+    log_add("DEL", number, who, err == PB_OK);
+ 
+    return err;
 }

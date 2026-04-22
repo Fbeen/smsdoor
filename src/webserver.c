@@ -11,6 +11,8 @@
 #include "dnsserver.h"
 #include "webserver.h"
 #include "router.h"
+#include "config.h"
+#include "console.h"
 
 #define TCP_PORT 80
 #define CHUNK_SIZE 1024
@@ -138,7 +140,7 @@ static err_t ws_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
     char *line_end = strstr(state->headers, "\r\n");
     if (line_end) *line_end = '\0';
 
-    printf("HTTP request: %s\n", state->headers);
+    // printf("[TC] HTTP request: %s\n", state->headers);
 
     state->request_handled = 1;
 
@@ -163,7 +165,7 @@ static err_t ws_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
     char *q = strchr(state->path, '?');
     if (q) *q = '\0';
 
-    printf("PATH: %s\n", state->path);
+    // printf("[TC] PATH: %s\n", state->path);
 
     /* Router */
     router_handle_request(state->path, state, pcb);
@@ -191,7 +193,7 @@ static err_t ws_sent(void *arg, struct tcp_pcb *pcb, u16_t len)
         err_t err = ws_send_chunk(pcb, con_state);
         if (err != ERR_OK)
         {
-            printf("tcp_send_next_chunk failed: %d\n", err);
+            cprintf("[TC] tcp_send_next_chunk failed: %d\n", err);
             return ws_close_connection(con_state, pcb, err);
         }
 
@@ -262,7 +264,7 @@ static bool ws_open(const char *ap_name)
     tcp_arg(server_state.server_pcb, &server_state);
     tcp_accept(server_state.server_pcb, ws_accept);
 
-    printf("Connect to WiFi '%s'\n", ap_name);
+    cprintf("[TC] Connect to WiFi '%s'\n", ap_name);
     return true;
 }
 
@@ -275,15 +277,12 @@ Initializes the webserver:
 */
 void ws_init(void)
 {
-    const char *ap_name = "SMSDOOR";
-    const char *password = "12345678";
-
     if (cyw43_arch_init()) {
-        printf("WiFi init failed\n");
+        cprintf("[TC] WiFi init failed\n");
         return;
     }
 
-    cyw43_arch_enable_ap_mode(ap_name, password, CYW43_AUTH_WPA2_AES_PSK);
+    cyw43_arch_enable_ap_mode(cfg.ssid, cfg.pass, CYW43_AUTH_WPA2_AES_PSK);
 
     ip4_addr_t mask;
     server_state.gw.addr = PP_HTONL(CYW43_DEFAULT_IP_AP_ADDRESS);
@@ -295,5 +294,5 @@ void ws_init(void)
     static dns_server_t dns_server;
     dns_server_init(&dns_server, &server_state.gw);
 
-    ws_open(ap_name);
+    ws_open(cfg.ssid);
 }

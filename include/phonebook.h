@@ -16,6 +16,9 @@
 #define ERR_PB_SAVE_FAILED            -4
 #define ERR_PB_NUMBER_NOT_FOUND       -5
 #define ERR_PB_LAST_ADMIN             -6
+#define ERR_PB_ALREADY_ADMIN          -7
+#define ERR_PB_NOT_ADMIN              -8
+#define ERR_PB_NOT_YOURSELF           -9
 
 typedef struct
 {

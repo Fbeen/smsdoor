@@ -13,6 +13,7 @@
 #include "util.h"
 #include "hardware.h"
 #include "led.h"
+#include "console.h"
 
 static const command_entry_t command_table[] =
 {
@@ -27,6 +28,8 @@ static const command_entry_t command_table[] =
     { CMD_OVERHEAD,{ "OVERHEAD", "GARAGE", NULL }, CMD_LEVEL_ADMIN, cmd_overhead },
     { CMD_HELP,    { "HELP", NULL }, CMD_LEVEL_ADMIN, cmd_help },
     { CMD_PIN,     { "PIN", NULL }, CMD_LEVEL_CONSOLE, cmd_pin },
+    { CMD_SSID,    { "SSID", NULL }, CMD_LEVEL_ADMIN, cmd_ssid },
+    { CMD_PASS,    { "PASS", NULL }, CMD_LEVEL_ADMIN, cmd_pass },
     { CMD_INFO,    { "INFO", NULL }, CMD_LEVEL_ADMIN, cmd_info },
     { CMD_CLOSEAT, { "CLOSEAT", NULL }, CMD_LEVEL_ADMIN, cmd_closeat },
     { CMD_AT,      { "AT", "MODEM", NULL }, CMD_LEVEL_CONSOLE, cmd_at },
@@ -114,7 +117,10 @@ command_t make_command(char *line, uint8_t source, const char *sender)
 /* sends a response from a command function to the console and optionally to a sms */
 static void send_response(command_t *cmd, char *response)
 {
-    printf("%s\n\n", response);
+    if(strlen(response) == 0)
+        return;
+        
+    cprintf("[TC] %s\n", response);
 
     /* Als SMS → stuur antwoord terug */
     if (cmd->source == SRC_SMS)
@@ -170,8 +176,6 @@ bool command_allowed(command_t *cmd, uint8_t level)
 void process_command(command_t *cmd, char *response)
 {
     const command_entry_t *entry = command_find_by_id(cmd->id);
-
-    printf("ID: %d\n", cmd->id);
 
     if (!entry)
     {
@@ -267,9 +271,13 @@ static void cmd_list(command_t *cmd, char *response)
     phonebook_entry_t entry;
     int count = phonebook_count();
 
+    if (cmd->source == SRC_CONSOLE) {
+        strcpy(response, "\nLIST:\n\n");
+    }
+
     if (count == 0)
     {
-        strcat(response, "Phonebook empty");
+        strcat(response, "Phonebook empty\n\n");
     }
     else
     {
@@ -288,78 +296,33 @@ static void cmd_list(command_t *cmd, char *response)
         sprintf(tmp, "Total numbers: %d.", count);
         strcat(response, tmp);
     }
+
+    if (cmd->source == SRC_CONSOLE) {
+        printf("%s\n\n", response);
+        response[0] = 0;
+    }
+
 }
 
 static void cmd_promote(command_t *cmd, char *response)
 {
-    char number[PHONENR_SIZE];
-    char sender[PHONENR_SIZE];
+    int result = exec_cmd_promote(cmd->args, cmd->sender);
 
-    if (!phone_normalize(number, cmd->args))
-    {
-        strcat(response, "Invalid number");
-        return;
-    }
-
-    if(phonebook_is_admin(number)) {
-        strcat(response, "User is already an admin.");
-        return;
-    }
-
-    int r = phonebook_set_admin(number, 1);
-    if(r == PB_OK) {
-        modem_send_sms(number, "Gefeliciteerd, je bent nu een administrator!. sms HELP voor een overzicht van de functies.");
+    if(result == PB_OK) {
         strcat(response, "User promoted to admin!");
-
-        log_add("PROMOTE", number, cmd->sender, true);
-
-        return;
+    } else {
+        strcat(response, phonebook_strerror(result));
     }
-
-    log_add("PROMOTE", number, cmd->sender, false);
-
-    strcat(response, phonebook_strerror(r));
 }
 
 static void cmd_demote(command_t *cmd, char *response)
 {
-    char number[PHONENR_SIZE];
-    char sender[PHONENR_SIZE];
+    int result = exec_cmd_demote(cmd->args, cmd->sender);
 
-    if (!phone_normalize(number, cmd->args))
-    {
-        strcat(response, "Invalid number");
-        return;
-    }
-
-    phone_normalize(sender, cmd->sender);
-
-    /* SMS: jezelf niet demoten */
-    if (cmd->source == SRC_SMS && strcmp(number, sender) == 0)
-    {
-        strcat(response, "Cannot demote yourself");
-        return;
-    }
-
-    if (!phonebook_is_admin(number))
-    {
-        strcat(response, "User is already normal user");
-        return;
-    }
-
-    if (phonebook_count_admins() <= 1)
-    {
-        strcat(response, "Cannot demote last admin");
-        return;
-    }
-
-    int r = phonebook_set_admin(number, 0);
-    if (r == PB_OK) {
+    if(result == PB_OK) {
         strcat(response, "User demoted");
-        log_add("DEMOTE", number, cmd->sender, true);
     } else {
-        strcat(response, phonebook_strerror(r));
-        log_add("DEMOTE", number, cmd->sender, false);
+        strcat(response, phonebook_strerror(result));
     }
 }
 
@@ -385,8 +348,6 @@ static void cmd_overhead(command_t *cmd, char *response)
     str_trim(cmd->args);
     str_to_upper(cmd->args);
 
-    printf(">>%s (%u)\n", cmd->args, strlen(cmd->args));
-
     for (int i = 0; i < CLOSE_WORDS_COUNT; i++)
     {
         if (strcmp(cmd->args, close_words[i]) == 0)
@@ -411,8 +372,7 @@ static void cmd_help(command_t *cmd, char *response)
         "UP\n"
         "DOWN\n"
         "OVERHEAD DOWN\n"
-        "CLOSEAT <hh:mm>\n"
-        "CLOSEAT OFF\n"
+        "CLOSEAT <hh:mm>/OFF\n"
         "\n"
         "users:\n"
         "ADD <nr>\n"
@@ -426,13 +386,13 @@ static void cmd_help(command_t *cmd, char *response)
         "system:\n"
         "INFO\n"
         "LOG\n"
-        "\n";
+        "SIDD <name>\n"
+        "PASS <passwd>";
 
-        strcat(response, help_text);
+        strcpy(response, help_text);
         return;
     }
-    printf("\n"
-        "HELP:\n"
+    printf("\nHELP:\n"
         "\n"
         "[door]\n"
         "UP               Rolluik omhoog.\n"
@@ -452,11 +412,13 @@ static void cmd_help(command_t *cmd, char *response)
         "\n"
         "[system]\n"
         "PIN <code> *     Stel een nieuwe pincode in om de SIM kaart te ontgrendelen.\n"
+        "SIDD <name>      Stel een nieuwe SSID in voor het wifi AP.\n"
+        "PASS <passwd>    Stel een nieuw wachtwoord in voor het wifi AP.\n"
         "AT <command> *   Stuur een commando rechtstreeks naar de A7670E modem.\n"
         "INFO             Vraag systeem informatie op.\n"
         "LOG              Laat de laatste gebeurtenissen zien.\n"
         "\n"
-        "* console only");
+        "* console only\n\n");
 
         /* overwrite response */
         strcpy(response, "");
@@ -493,6 +455,7 @@ static void cmd_pin(command_t *cmd, char *response)
 
     /* Opslaan in flash */
     config_set_pin(pin);
+    config_save();
 
     log_add("PIN", "", cmd->sender, true);
 
@@ -507,45 +470,81 @@ static void cmd_pin(command_t *cmd, char *response)
     watchdog_reboot(0, 0, 0); // reset pico
 }
 
+static void cmd_ssid(command_t *cmd, char *response)
+{
+    const char *ssid = cmd->args;
+    int len = strlen(ssid);
+
+    /* Lengte check */
+    if (len < 2 || len > 32)
+    {
+        strcat(response, "SSID must be 2-32 characters long");
+        return;
+    }
+
+    /* Opslaan in flash */
+    config_set_ssid(ssid);
+    config_save();
+
+    log_add("SSID", "", cmd->sender, true);
+
+    strcat(response, "SSID stored, Rebooting...");
+
+    send_response(cmd, response);
+
+    watchdog_reboot(0, 0, 0); // reset pico
+}
+
+static void cmd_pass(command_t *cmd, char *response)
+{
+    const char *pass = cmd->args;
+    int len = strlen(pass);
+
+    /* Lengte check */
+    if (len < 8 || len > 63)
+    {
+        strcat(response, "PASSWORD must be 8-63 characters long");
+        return;
+    }
+
+    /* Opslaan in flash */
+    config_set_pass(pass);
+    config_save();
+
+    log_add("PASSWORD", "", cmd->sender, true);
+
+    strcat(response, "PASSWORD stored, Rebooting...");
+
+    send_response(cmd, response);
+
+    watchdog_reboot(0, 0, 0); // reset pico
+}
+
 static void cmd_info(command_t *cmd, char *response)
 {
-    char uptime[32];
-    char tempbuf[32];
+    char lines[INFO_LINES][INFO_LINE_LEN];
+    int i;
 
-    get_uptime_string(uptime);
+    /* vul array met regels */
+    exec_cmd_info(lines);
 
-    strcat(response, "SMSDOOR v");
-    strcat(response, VERSION);
-    strcat(response, "\n");
-    
-    strcat(response, "Uptime: ");
-    strcat(response, uptime);
-    strcat(response, "\n");
+    /* begin met lege string */
+    response[0] = 0;
 
-    strcat(response, "System time: ");
-    if(clock_get_time(tempbuf))
+    /* alle regels samenvoegen met \n */
+    for (i = 0; i < INFO_LINES; i++)
     {
-        strcat(response, tempbuf);
-        strcat(response, "\n");
-    } else {
-        strcat(response, "NOT SET\n");
+        strcat(response, lines[i]);
+
+        if (i < (INFO_LINES - 1))
+            strcat(response, "\n");
     }
-
-    sprintf(tempbuf, "Users %d Admins %d\n", phonebook_count(), phonebook_count_admins());
-    strcat(response, tempbuf);
-
-    int h = cfg.close_time / 60;
-    int m = cfg.close_time % 60;
-
-    if(cfg.close_time == CLOSE_DISABLED) {
-        strcat(response, "Auto close time: OFF\n");
-    } else {
-        sprintf(tempbuf, "Auto close time: %d:%02d\n", h, m);
-        strcat(response, tempbuf);
-    }
-
-
-    strcat(response, "\nhttps://github.com/Fbeen/smsdoor\n");
+    
+    if (cmd->source == SRC_CONSOLE) {
+        printf("\nINFO:\n\n");
+        printf(response);
+        response[0] = 0;
+    } 
 }
 
 static void cmd_closeat(command_t *cmd, char *response)
@@ -642,13 +641,16 @@ static void cmd_log(command_t *cmd, char *response)
     /* Console → hele log */
     int count = log_count();
 
+    strcpy(response, ""); // no response
+
+    printf("\nLOG:\n\n");
+
     if (count == 0)
     {
-        strcat(response, "Log empty\n");
+        printf("Log empty\n\n");
         return;
     }
 
-    printf("LOG:\n");
     for (int i = 0; i < count; i++)
     {
         log_entry_t *e = log_get(i);
@@ -656,19 +658,21 @@ static void cmd_log(command_t *cmd, char *response)
 
         printf("%s\n", line);
     }
-    strcpy(response, "");
+
+    printf("\n");
 }
 
 
 /* ----------------------------------------------------------
-   COMMAND functions
+   The functions below are called from above OR from router.c
    ---------------------------------------------------------- */
 
+/* Adds a new user */
 int exec_cmd_add(const char *phonenr, const char *who)
 {
-    int err = phonebook_add(phonenr);
+    int result = phonebook_add(phonenr);
 
-    if (err == PB_OK)
+    if (result == PB_OK)
     {
         modem_send_sms(phonenr, "Hallo, Welkom bij de sms rolluik bediening. stuur \"Op\" om het rolluik omhoog, en \"Neer\" om het rolluik omlaag te sturen.");
         log_add("ADD", phonenr, who, true);
@@ -678,9 +682,10 @@ int exec_cmd_add(const char *phonenr, const char *who)
     
     log_add("ADD", phonenr, who, false);
 
-    return err;
+    return result;
 }
 
+/* Deletes a user */
 int exec_cmd_del(const char *phonenr, const char *who)
 {
     char number[PHONENR_SIZE];
@@ -699,9 +704,144 @@ int exec_cmd_del(const char *phonenr, const char *who)
         }
     }
 
-    int err = phonebook_remove(number);
+    int result = phonebook_remove(number);
 
-    log_add("DEL", number, who, err == PB_OK);
+    log_add("DEL", number, who, result == PB_OK);
  
-    return err;
+    return result;
+}
+
+/* promotes a user to an administrator */
+int exec_cmd_promote(const char *phonenr, const char *who)
+{
+    char number[PHONENR_SIZE];
+    char sender[PHONENR_SIZE];
+
+    if (!phone_normalize(number, phonenr))
+    {
+        return ERR_PB_INVALID_NUMBER;
+    }
+
+    /* if user is already an admin */
+    if(phonebook_is_admin(number)) {
+        return ERR_PB_ALREADY_ADMIN;
+    }
+
+    int result = phonebook_set_admin(number, 1);
+
+    log_add("PROMOTE", number, who, result == PB_OK);
+
+    if(result == PB_OK) {
+        modem_send_sms(number, "Gefeliciteerd, je bent nu een administrator!. sms HELP voor een overzicht van de functies.");
+    }
+
+    return result;
+}
+
+/* demotes an administrator to an normal user */
+int exec_cmd_demote(const char *phonenr, const char *who)
+{
+    char number[PHONENR_SIZE];
+    char sender[PHONENR_SIZE];
+
+    if (!phone_normalize(number, phonenr))
+    {
+        return ERR_PB_INVALID_NUMBER;
+    }
+
+    phone_normalize(sender, who);
+
+    /* SMS: do not demote yourself */
+    if(strcmp(number, sender) == 0)
+    {
+        return ERR_PB_NOT_YOURSELF;
+    }
+
+    /* if user is already a normal user */
+    if (!phonebook_is_admin(number))
+    {
+        return ERR_PB_NOT_ADMIN;
+    }
+
+    /* do not demote the last admin */
+    if (phonebook_count_admins() <= 1)
+    {
+        return ERR_PB_LAST_ADMIN;
+    }
+
+    int result = phonebook_set_admin(number, 0);
+
+    log_add("DEMOTE", number, who, result == PB_OK);
+
+    return result;
+}
+
+/* swaps an user between admin and normal user */
+int exec_cmd_swap(const char *phonenr, const char *who)
+{
+    char number[PHONENR_SIZE];
+    char response[256];
+    int  result;
+
+    if (!phone_normalize(number, phonenr))
+    {
+        return ERR_PB_INVALID_NUMBER;
+    }
+    
+    /* if user is an admin */
+    if (phonebook_is_admin(number))
+    {
+        result = exec_cmd_demote(number, who);
+    } else {
+        result = exec_cmd_promote(number, who);
+    }
+
+    return result;
+}
+
+void exec_cmd_info(char lines[INFO_LINES][INFO_LINE_LEN])
+{
+    char uptime[32];
+    char tempbuf[64];
+
+    get_uptime_string(uptime);
+
+    /* Regel 1 */
+    strcpy(lines[0], "SMSDOOR v");
+    strcat(lines[0], VERSION);
+
+    /* Regel 2 */
+    strcpy(lines[1], "Uptime: ");
+    strcat(lines[1], uptime);
+
+    /* Regel 3 */
+    strcpy(lines[2], "System time: ");
+    if (clock_get_time(tempbuf))
+        strcat(lines[2], tempbuf);
+    else
+        strcat(lines[2], "NOT SET");
+
+    /* Regel 4 */
+    sprintf(lines[3],
+        "Users %d Admins %d",
+        phonebook_count(),
+        phonebook_count_admins());
+
+    /* Regel 5 */
+    if (cfg.close_time == CLOSE_DISABLED)
+    {
+        strcpy(lines[4], "Auto close time: OFF");
+    }
+    else
+    {
+        int h = cfg.close_time / 60;
+        int m = cfg.close_time % 60;
+
+        sprintf(lines[4],
+            "Auto close time: %d:%02d",
+            h, m);
+    }
+
+    /* Regel 6 */
+    strcpy(lines[5], "https://github.com/Fbeen/smsdoor");
 }

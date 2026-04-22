@@ -39,7 +39,7 @@ bool timer_callback(struct repeating_timer *t)
 int main()
 {
     /* enable watchdog, pico restarts if things go wrong */
-    // watchdog_enable(30000, 1);  // 15 seconds watchdog
+    watchdog_enable(30000, 1);  // 15 seconds watchdog
 
     /* enable standard pico stuff */
     stdio_init_all();
@@ -49,9 +49,6 @@ int main()
 
     /* sets the gpio's, see hardware.c */
     gpio_setup();
-
-    /* start webserver */
-    ws_init();
 
     /* Start repeating hardware timer */
     add_repeating_timer_ms(ISR_REPEAT_MS, timer_callback, NULL, &timer);
@@ -63,11 +60,16 @@ int main()
     uart_setup();
     sleep_ms(2000);
 
-    printf("\nPico Rolluik Controller v%s starting...\n", VERSION);
-    printf("\nType \"HELP\" voor hulp!\n\n");
+    cprintf("\n[TC] Pico Rolluik Controller v%s starting...\n", VERSION);
+    cprintf("[TC] Type \"HELP\" voor hulp!\n");
 
     /* loads the phonenumber whitelist from flash */
     phonebook_init();
+
+    /* start webserver */
+    ws_init();
+
+    watchdog_update();
 
     /* init modem, see modem.c */
     modem_init();

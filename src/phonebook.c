@@ -5,6 +5,7 @@
 #include "hardware/flash.h"
 #include "hardware/sync.h"
 #include "phonebook.h"
+#include "console.h"
 
 #define PHONE_MIN_DIGITS 8
 #define PHONE_MAX_DIGITS 15
@@ -20,7 +21,7 @@ void phonebook_init(void)
 
     if (pb.magic != PHONEBOOK_MAGIC || pb.version != PHONEBOOK_VERSION)
     {
-        printf("Phonebook flash invalid, initializing...\n");
+        cprintf("[TC] Phonebook flash invalid, initializing...\n");
 
         memset(&pb, 0, sizeof(phonebook_t));
         pb.magic = PHONEBOOK_MAGIC;
@@ -30,7 +31,7 @@ void phonebook_init(void)
     }
     else
     {
-        printf("Phonebook flash valid\n");
+        cprintf("[TC] Phonebook flash valid\n");
     }
 }
 
@@ -291,6 +292,12 @@ const char *phonebook_strerror(int err)
             return "PNumber not found";
         case ERR_PB_LAST_ADMIN:
             return "Cannot remove last admin";
+        case ERR_PB_ALREADY_ADMIN:
+            return "User is already an admin";
+        case ERR_PB_NOT_ADMIN:
+            return "User is not an admin";
+        case ERR_PB_NOT_YOURSELF:
+            return "Cannot demote yourself";
         default:
             return "Unknown error";
     }

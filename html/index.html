@@ -12,6 +12,12 @@
                 background: #111;
                 color: #eee;
             }
+            
+            label {
+                font-size: 80%;
+                color: #aaaaaa;
+                padding-top: 10px;
+            }
 
             /* Header */
             .header {
@@ -142,6 +148,9 @@
 
             /* Console */
             .console {
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-end;
                 white-space: pre-line;
                 background: #000;
                 height: 45vh;
@@ -162,16 +171,30 @@
                 width: 100%;
             }
             
-            .console-input input {
+            input {
+                width: 100%;
+                box-sizing: border-box;
                 height: 18px;
-                margin-top: 9px;
+                margin: 9px 0;
                 flex: 1;
-                padding: 10px;
+                padding: 18px 10px;
                 font-size: 16px;
                 background: #333;
                 border: 1px solid #aaa;
                 border-radius: 6px;
                 color: #fff;
+            }
+            
+            h3.settings {
+                    margin: 25px 0 5px 0;
+            }
+            
+            h3.settings:first-of-type {
+                margin-top: 0;
+            }
+            
+            .mg {
+                margin-top: 60px;
             }
 
             .console-input button {
@@ -210,6 +233,25 @@
             /* Icons */
             svg {
                 fill: white;
+            }
+            .help-list {
+                display: grid;
+                grid-template-columns: 140px 1fr;
+                gap: 8px 5px;
+                padding-left: 10px;
+                border-radius: 6px;
+                margin-bottom: 15px;
+            }
+
+            .help-cmd {
+                color: #00c853;
+                font-weight: bold;
+                font-size: 80%;
+            }
+
+            .help-desc {
+                color: #eee;
+                font-size: 80%;
             }
         </style>
 
@@ -298,6 +340,9 @@
             <b>INFO:</b>
             <div id="infohtml">Loading...</div>
         </div>
+        
+        <button onclick="showSection('help')" style="width:100%; margin-top:20px; font-weight:bold;">HELP</button>
+        
     </div>
 
     <!-- USERS -->
@@ -313,8 +358,31 @@
         </div>
     </div>
     
-    <!-- CONSOLE -->
+    <!-- SETTINGS -->
     <div id="settings" class="section">
+
+        <form onsubmit="addPhone(); return false;">
+            <h3 class="settings title-green">Wifi</h3>
+            <label>SSID</label>
+            <input id="ssid" type="text" placeholder="smsdoor"><br>
+            <label>Password</label>
+            <input id="wifi_pass" type="text" placeholder="123456"><br>
+
+            <h3 class="settings title-green">Simcard</h3>
+            <label>Pincode SIM card</label>
+            <input id="sim_pin" type="text" placeholder="0000">
+
+            <h3 class="settings title-green">Sturingstijd</h3>
+            <label>Schakeltijd rolluik motor (seconden)</label>
+            <input id="motor_time" type="number" placeholder="180"><br>
+            <label>Schakeltijd overheaddeur (seconden)</label>
+            <input id="garage_time" type="number" placeholder="180">
+            <button class="mg" onclick="saveSettings()">Opslaan</button>
+        </form>
+    </div>
+
+    <!-- CONSOLE -->
+    <div id="console_section" class="section">
         <div id="console" class="console">
             SMSDOOR console ready...
         </div>
@@ -329,11 +397,70 @@
 
     <!-- HELP -->
     <div id="help" class="section">
-        <h3>Help</h3>
-        SSID wijzigen → SSID &lt;naam&gt;<br><br>
-        Wachtwoord wijzigen → PWD &lt;password&gt;<br><br>
-        Pin wijzigen → PIN &lt;pincode&gt;<br><br>
-        AT commands via console
+        <h3 class="title-blue">Bediening</h3>
+        <div class="help-list">
+            <div class="help-cmd">OP</div>
+            <div class="help-desc">Rolluik omhoog.</div>
+
+            <div class="help-cmd">NEER</div>
+            <div class="help-desc">Rolluik omlaag.</div>
+
+            <div class="help-cmd">OVERHEAD NEER</div>
+            <div class="help-desc">Overheaddeur dicht.</div>
+
+            <div class="help-cmd">CLOSEAT &lt;hh:mm&gt;</div>
+            <div class="help-desc">Zet de dagelijkse automatische sluitingstijd.</div>
+
+            <div class="help-cmd">CLOSEAT OFF</div>
+            <div class="help-desc">Zet de dagelijkse automatische sluitingstijd uit.</div>
+        </div>
+
+        <h3 class="title-blue">Toegang</h3>
+        <div class="help-list">
+            <div class="help-cmd">ADD &lt;telnr&gt;</div>
+            <div class="help-desc">Voeg een telefoonnr toe.</div>
+
+            <div class="help-cmd">DEL &lt;telnr&gt;</div>
+            <div class="help-desc">Verwijder een telefoonnr.</div>
+
+            <div class="help-cmd">LIST</div>
+            <div class="help-desc">Geef een overzicht van telefoonnummers.</div>
+        </div>
+
+        <h3 class="title-blue">Admin</h3>
+        <div class="help-list">
+            <div class="help-cmd">PROMOTE &lt;telnr&gt;</div>
+            <div class="help-desc">Maak van een bestaand telefoonnr een administrator.</div>
+
+            <div class="help-cmd">DEMOTE &lt;telnr&gt;</div>
+            <div class="help-desc">Maak van een bestaande administrator een normale gebruiker.</div>
+        </div>
+
+        <h3 class="title-blue">System</h3>
+        <div class="help-list">
+            <div class="help-cmd">PIN &lt;code&gt; *</div>
+            <div class="help-desc">Stel een nieuwe pincode in om de SIM kaart te ontgrendelen.</div>
+
+            <div class="help-cmd">SIDD &lt;name&gt;</div>
+            <div class="help-desc">Stel een nieuwe SSID in voor het wifi AP.</div>
+
+            <div class="help-cmd">PASS &lt;passwd&gt;</div>
+            <div class="help-desc">Stel een nieuw wachtwoord in voor het wifi AP.</div>
+
+            <div class="help-cmd">AT &lt;command&gt; *</div>
+            <div class="help-desc">Stuur een commando rechtstreeks naar de A7670E modem.</div>
+
+            <div class="help-cmd">INFO</div>
+            <div class="help-desc">Vraag systeem informatie op.</div>
+
+            <div class="help-cmd">LOG</div>
+            <div class="help-desc">Laat de laatste gebeurtenissen zien.</div>
+        </div>
+
+        <div class="info" style="margin-top:15px;">
+            * alleen via console
+        </div>
+
     </div>
 
     <!-- NAVBAR -->
@@ -345,180 +472,258 @@
 
         <button id="btn_users" onclick="showSection('users')">
             <svg width="20" height="20"><use href="#icon-users"/></svg>
-            Users
+            Toegang
         </button>
 
         <button id="btn_settings" onclick="showSection('settings')">
+            <svg width="20" height="20"><use href="#icon-help"/></svg>
+            Instellingen
+        </button>
+
+        <button id="btn_console_section" onclick="showSection('console_section')">
             <svg width="20" height="20"><use href="#icon-console"/></svg>
             Console
         </button>
 
-        <button id="btn_help" onclick="showSection('help')">
-            <svg width="20" height="20"><use href="#icon-help"/></svg>
-            Help
-        </button>
     </div>
 
-    <script>
-    let statusTimer = null;
-    let lastId = 0;
+   <script>
+   let statusTimer = null;
+   let since = 0;
 
-    window.addEventListener("load", () => {
-        initEventListeners();
-        updateInfo();
-        updateUsers();
-        setInterval(updateInfo, 60000);
-        initConsole();
-    });
-    
-    function validPhone(nr)
+   // ================= INIT =================
+
+   window.addEventListener("load", () => {
+       initEventListeners();
+       loadState();
+       setInterval(updateInfo, 60000);
+   });
+
+ /*   
+    (function() {
+        const desired = "smsdoor";
+        const fallback = "192.168.4.1";
+        const current = window.location.hostname;
+
+        // voorkom redirect loops + accepteer subdomeinen
+        if (!current.includes(desired) && current !== fallback) {
+            window.location.replace("http://" + desired + "/");
+        }
+    })();
+
+*/
+   // ================= STATE =================
+
+    function loadState()
     {
-        return /^\+?[0-9]{9,15}$/.test(nr);
-    }
-
-    function apiJson(url, ok)
-    {
-        fetch(url)
-            .then(r => r.json())
-            .then(d => d.err === "Ok" ? ok() : alert(d.err));
-    }
-
-    function initEventListeners()
-    {
-        document.getElementById("users").addEventListener("click", e => {
-            let del = e.target.closest(".btn-del");
-            if (del) {
-                const nr = del.dataset.id;
-                return apiJson("/del?nr=" + encodeURIComponent(nr), updateUsers);
-            }
-
-            let adm = e.target.closest(".btn-adm");
-            if (adm) {
-                const nr = adm.dataset.id;
-                return apiJson("/adm?nr=" + encodeURIComponent(nr), updateUsers);
-            }
-        });
-
-        document.addEventListener("touchstart", function(){}, true);
-    }
-
-    function updateInfo()
-    {
-        fetch("/info")
-            .then(r => r.text())
-            .then(html => infohtml.innerHTML = `<pre>${html}</pre>`)
-            .catch(() => infohtml.innerHTML = "<pre>Status error</pre>");
-    }
-
-    function updateUsers()
-    {
-        fetch("/users")
+        fetch("/status")
             .then(r => r.json())
             .then(data => {
-                let html = ``;
 
-                data.users.forEach((u, i) => {
-                    html += `<div class="user">
-                        <div>
-                            ${u.nr}${u.admin ? " *" : ""}
-                        </div>
-                        <div>
-                            <button class="icon-btn btn-del" data-id="${u.nr}"><svg width="16" height="16"><use href="#icon-del"/></svg></button>
-                            <button class="icon-btn btn-adm" data-id="${u.nr}"><svg width="16" height="16"><use href="#icon-admin"/></svg></button>
-                        </div>
-                    </div>`;
-                });
-                
-                userlist.innerHTML = html;
-            })
-            .catch(() => userlist.innerHTML = "Status error");
-    }
+                if (data.users) renderUsers(data.users);
+                if (data.settings) renderSettings(data.settings);
+                if (data.info) renderInfo(data.info);
 
-    function sendCmd(url)
-    {
-        fetch(url)
-            .then(r => r.text())
-            .then(showStatus)
-            .catch(() => showStatus("Command failed"));
-    }
-
-    function showStatus(msg)
-    {
-        const el = document.getElementById("status");
-
-        el.textContent = msg;
-        el.classList.add("show");
-
-        if (statusTimer) clearTimeout(statusTimer);
-
-        statusTimer = setTimeout(() => {
-            el.classList.remove("show");
-        }, 5000);
-    }
-
-    function addPhone()
-    {
-        let p = document.querySelector('[name="phonenr"]');
-        
-        fetch("/add?nr=" + encodeURIComponent(p.value))
-            .then(r => r.json())
-            .then(d => {
-                if (d.err === "Ok") {
-                    p.value = "";
-                    updateUsers();
-                } else {
-                    alert(d.err);
+                if (data.console) {
+                    since = data.console.since || 0;
+                    renderConsoleFull(data.console.logs);
                 }
-            });
-    }
-    
-    function appendConsole(text)
-    {
-        let c = document.querySelector('.console');
-        c.textContent += text;
-        c.scrollTop = c.scrollHeight;
-    }
 
-    function initConsole()
-    {
-        fetch("/console/latest")
-            .then(r => r.json())
-            .then(data => {
-                lastId = data.lastId;
-                consoleLoop();   // daarna pas starten
-            });
-    }
-
-    function consoleLoop()
-    {
-        fetch("/console?last=" + lastId)
-            .then(r => r.json())
-            .then(data => {
-                data.logs.forEach(log => {
-                    appendConsole(log.text);
-                    lastId = log.id;
-                });
-            })
-            .catch(() => {})
-            .finally(() => {
                 consoleLoop();
             });
     }
 
-    function consoleCommand()
-    {
-        let p = document.querySelector('[name="command"]');
-        let cmd = p.value;
+   // ================= INFO =================
 
-        fetch("/console/cmd?c=" + encodeURIComponent(cmd))
-            .then(r => r.text())
-            .then(t => {
-                appendConsole("> " + cmd + "\n");
-            });
+   function renderInfo(info)
+   {
+       let html = info.join("<br>");
+       infohtml.innerHTML = html;
+   }
 
-        p.value = "";
-    }
-    </script>
+   function updateInfo()
+   {
+       fetch("/info")
+           .then(r => r.json())
+           .then(data => {
+               renderInfo(data.info);
+           })
+           .catch(() => infohtml.innerHTML = "Status error");
+   }
 
+   // ================= USERS =================
+
+   function renderUsers(users)
+   {
+       let html = ``;
+
+       users.forEach(u => {
+           html += `<div class="user">
+               <div>
+                   ${u.nr}${u.admin ? " *" : ""}
+               </div>
+               <div>
+                   <button class="icon-btn btn-del" data-id="${u.nr}">
+                       <svg width="16" height="16"><use href="#icon-del"/></svg>
+                   </button>
+                   <button class="icon-btn btn-adm" data-id="${u.nr}">
+                       <svg width="16" height="16"><use href="#icon-admin"/></svg>
+                   </button>
+               </div>
+           </div>`;
+       });
+
+       userlist.innerHTML = html;
+   }
+
+   function updateUsers()
+   {
+       fetch("/users")
+           .then(r => r.json())
+           .then(data => renderUsers(data.users));
+   }
+
+   // ================= SETTINGS =================
+
+   function renderSettings(s)
+   {
+       ssid.value = s.ssid || "";
+       wifi_pass.value = s.password || "";
+       sim_pin.value = s.simpin || "";
+       motor_time.value = s.door || "";
+       garage_time.value = s.overhead || "";
+   }
+
+   function saveSettings()
+   {
+       fetch(`/settings/update?ssid=${encodeURIComponent(ssid.value)}`
+           + `&password=${encodeURIComponent(wifi_pass.value)}`
+           + `&simpin=${encodeURIComponent(sim_pin.value)}`
+           + `&door=${motor_time.value}`
+           + `&overhead=${garage_time.value}`)
+       .then(r => r.json())
+       .then(d => {
+           if (d.status === "ok") {
+               showStatus("Settings opgeslagen");
+           } else {
+               alert(d.errors.join("\n"));
+           }
+       });
+   }
+
+   // ================= CONSOLE =================
+
+   function renderConsoleFull(logs)
+   {
+       let c = document.getElementById("console");
+       c.textContent = logs.join("\n");
+       c.scrollTop = c.scrollHeight;
+   }
+
+   function appendConsole(logs)
+   {
+       let c = document.getElementById("console");
+
+       logs.forEach(line => {
+           c.textContent += line + "\n";
+       });
+
+       // max 50 regels houden
+       let lines = c.textContent.split("\n");
+       if (lines.length > 50) {
+           c.textContent = lines.slice(-50).join("\n");
+       }
+
+       c.scrollTop = c.scrollHeight;
+   }
+
+   function consoleLoop()
+   {
+       fetch("/console?since=" + since)
+           .then(r => r.json())
+           .then(data => {
+               if (data.console.changed) {
+                   appendConsole(data.console.logs);
+                   since = data.console.since;
+               }
+           })
+           .catch(() => {})
+           .finally(() => consoleLoop());
+   }
+
+   // ================= COMMAND =================
+
+   function consoleCommand()
+   {
+       let p = document.querySelector('[name="command"]');
+       let cmd = p.value;
+
+       fetch("/console/cmd?c=" + encodeURIComponent(cmd))
+           .then(() => {
+               appendConsole(["> " + cmd]);
+           });
+
+       p.value = "";
+   }
+
+   // ================= USERS ACTIONS =================
+
+   function initEventListeners()
+   {
+       document.getElementById("users").addEventListener("click", e => {
+
+           let del = e.target.closest(".btn-del");
+           if (del) {
+               return fetch("/users/del?nr=" + encodeURIComponent(del.dataset.id))
+                   .then(() => updateUsers());
+           }
+
+           let adm = e.target.closest(".btn-adm");
+           if (adm) {
+               return fetch("/users/adm?nr=" + encodeURIComponent(adm.dataset.id))
+                   .then(() => updateUsers());
+           }
+       });
+
+       document.addEventListener("touchstart", function(){}, true);
+   }
+
+   // ================= UI =================
+
+   function sendCmd(url)
+   {
+       fetch(url)
+           .then(r => r.text())
+           .then(showStatus)
+           .catch(() => showStatus("Command failed"));
+   }
+
+   function showStatus(msg)
+   {
+       const el = document.getElementById("status");
+
+       el.textContent = msg;
+       el.classList.add("show");
+
+       if (statusTimer) clearTimeout(statusTimer);
+
+       statusTimer = setTimeout(() => {
+           el.classList.remove("show");
+       }, 5000);
+   }
+
+   function addPhone()
+   {
+       let p = document.querySelector('[name="phonenr"]');
+
+       fetch("/users/add?nr=" + encodeURIComponent(p.value))
+           .then(r => r.json())
+           .then(() => {
+               p.value = "";
+               updateUsers();
+           });
+   }
+   </script>
+        
 </body>
 </html>

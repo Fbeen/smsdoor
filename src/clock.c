@@ -9,6 +9,7 @@
 #include "config.h"
 #include "rshutter.h"
 #include "log.h"
+#include "console.h"
 
 /* ----------------------------------------------------------
    Global clock
@@ -129,7 +130,7 @@ void clock_set_clock(char *buf)
     /* ignore invalid modem clock */
     if (yy == 70)
     {
-        printf("Ignoring invalid modem time\n");
+        cprintf("[TC] Ignoring invalid modem time\n");
         return;
     }
 
@@ -142,7 +143,7 @@ void clock_set_clock(char *buf)
 
     clock_dt.synced = true;
 
-    printf("Clock synced: %02d-%02d-%04d %02d:%02d:%02d\n",
+    cprintf("[TC] Clock synced: %02d-%02d-%04d %02d:%02d:%02d\n",
            dd, MM, clock_dt.year, hh, mm, ss);
 }
 
@@ -190,7 +191,7 @@ void clock_task()
             {
                 rshutter_down();
                 overhead_down();
-                printf("clock task: close now.\n");
+                cprintf("[TC] clock task: close now.\n");
                 log_add("AUTO CLOSE", "", "", true);
             }
         }

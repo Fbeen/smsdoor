@@ -15,12 +15,15 @@
 #include "clock.h"
 #include "led.h"
 #include "log.h"
+#include "console.h"
 
 line_buffer_t modem_line;
 
 char sms_number[PHONENR_SIZE];
 bool waiting_for_sms_text = false;
-static char pin[SIM_PIN_SIZE] = "0000";
+volatile bool modem_wait_flag = false;
+static char modem_wait_match[32];
+static bool sms_processed = false;
 
 /* ----------------------------------------------------------
    Modem helpers
@@ -31,37 +34,210 @@ void modem_send(const char *cmd)
     uart_puts(UART_MODEM, cmd);
     uart_puts(UART_MODEM, "\r\n");
 
-    printf(">> %s\n", cmd);
+    cprintf("[TM] %s\n", cmd);
+}
+
+void modem_feed_char(char c)
+{
+    static bool waiting_for_cmgr_text = false;
+    static char sms_text[COMMAND_SIZE];
+    static int sms_idx = 0;
+    static int last_sms_index = 0;
+
+    command_t cmd;
+    char response[MAX_CMD_LEN];
+
+    /* ready to send sms body text */
+    if (modem_wait_match[0] == '>' && c == '>')
+    {
+        modem_wait_flag = true;
+        return;
+    }
+
+    if (c == '\r' || c == '\n')
+    {
+        if (modem_line.index == 0)
+            return;
+
+        modem_line.buffer[modem_line.index] = 0;
+
+        // 🔥 filter rommel
+        if (strlen(modem_line.buffer) == 0)
+        {
+            modem_line.index = 0;
+            return;
+        }
+
+        // 🔥 logging
+        cprintf("[FM] %s\n", modem_line.buffer);
+
+        // 🔥 WAIT MATCH (belangrijk!)
+        if (modem_wait_match[0] &&
+            strstr(modem_line.buffer, modem_wait_match))
+        {
+            modem_wait_flag = true;
+        }
+
+        /* ---------------- CMTI → SMS index ---------------- */
+        if (strstr(modem_line.buffer, "+CMTI:"))
+        {
+            int index = atoi(strrchr(modem_line.buffer, ',') + 1);
+            last_sms_index = index;
+
+            char cmd_buf[32];
+            sprintf(cmd_buf, "AT+CMGR=%d", index);
+            modem_send(cmd_buf);
+        }
+
+        /* ---------------- CMGR header ---------------- */
+        else if (strstr(modem_line.buffer, "+CMGR:"))
+        {
+            extract_sms_number(modem_line.buffer, sms_number);
+            waiting_for_cmgr_text = true;
+            sms_processed = false;
+            sms_idx = 0;
+            sms_text[0] = 0;
+        }
+
+        /* ---------------- SMS tekst regels ---------------- */
+        else if (waiting_for_cmgr_text)
+        {
+            if (strcmp(modem_line.buffer, "OK") == 0)
+            {
+                char sms_copy[COMMAND_SIZE];
+                char number_copy[PHONENR_SIZE];
+                int sms_index_copy;
+
+                /* eerst de CMGR-state definitief afsluiten */
+                waiting_for_cmgr_text = false;
+
+                strncpy(sms_copy, sms_text, sizeof(sms_copy) - 1);
+                sms_copy[sizeof(sms_copy) - 1] = 0;
+
+                strncpy(number_copy, sms_number, sizeof(number_copy) - 1);
+                number_copy[sizeof(number_copy) - 1] = 0;
+
+                sms_index_copy = last_sms_index;
+
+                /* optioneel: buffer resetten */
+                sms_idx = 0;
+                sms_text[0] = 0;
+
+                /* nu pas command uitvoeren */
+                cmd = make_command(sms_copy, SRC_SMS, number_copy);
+                process_command(&cmd, response);
+
+                sleep_ms(1000);
+
+                char cmd_buf[32];
+                sprintf(cmd_buf, "AT+CMGD=%d", sms_index_copy);
+                modem_send(cmd_buf);
+            }
+            else
+            {
+                int len = strlen(modem_line.buffer);
+
+                if (sms_idx + len + 2 < sizeof(sms_text))
+                {
+                    strcpy(&sms_text[sms_idx], modem_line.buffer);
+                    sms_idx += len;
+                    sms_text[sms_idx++] = '\n';
+                    sms_text[sms_idx] = 0;
+                }
+            }
+        }
+
+        /* ---------------- SIM status ---------------- */
+        else if (strstr(modem_line.buffer, "CPIN:"))
+        {
+            if (strstr(modem_line.buffer, "SIM PIN"))
+            {
+                cprintf("[TC] Unlocking SIM...\n");
+
+                char cmd_buf[32];
+                sprintf(cmd_buf, "AT+CPIN=\"%s\"", cfg.sim_pin);
+                modem_send(cmd_buf);
+            }
+            else if (strstr(modem_line.buffer, "READY"))
+            {
+                cprintf("[TC] SIM ready\n");
+                modem_init_step2();
+            }
+            else if (strstr(modem_line.buffer, "PUK"))
+            {
+                cprintf("[TC] SIM PUK required!\n");
+                led_activate(GPIO_LED_ERROR, 100, 0);
+                log_add("PUK ASKED", "", "system", false);
+            }
+        }
+
+        /* ---------------- CME ERROR ---------------- */
+        else if (strstr(modem_line.buffer, "+CME ERROR"))
+        {
+            cprintf("[TC] MODEM ERROR: %s\n", modem_line.buffer);
+
+            if (strstr(modem_line.buffer, "incorrect password"))
+            {
+                cprintf("[TC] Wrong SIM PIN!\n");
+                led_activate(GPIO_LED_ERROR, 200, 0);
+                log_add("PIN WRONG", "", "system", false);
+            }
+        }
+
+        /* ---------------- Network registratie ---------------- */
+        else if (strstr(modem_line.buffer, "+CREG:") ||
+                 strstr(modem_line.buffer, "+CGREG:") ||
+                 strstr(modem_line.buffer, "+CEREG:"))
+        {
+            if (!(strstr(modem_line.buffer, ",1") ||
+                  strstr(modem_line.buffer, ",5")))
+            {
+                led_activate(GPIO_LED_ERROR, 500, 5000);
+            }
+        }
+
+        /* ---------------- Netwerktijd ---------------- */
+        else if (strstr(modem_line.buffer, "+CTZV:") ||
+                 strstr(modem_line.buffer, "+CCLK:"))
+        {
+            clock_set_clock(modem_line.buffer);
+        }
+
+        modem_line.index = 0;
+    }
+    else
+    {
+        if (modem_line.index < LINE_BUFFER_SIZE - 1)
+            modem_line.buffer[modem_line.index++] = c;
+    }
 }
 
 bool modem_wait_for(const char *response, uint32_t timeout_ms)
 {
-    char buffer[256];
-    int idx = 0;
+    strncpy(modem_wait_match, response, sizeof(modem_wait_match) - 1);
+    modem_wait_match[sizeof(modem_wait_match) - 1] = 0;
+
+    modem_wait_flag = false;
 
     absolute_time_t timeout = make_timeout_time_ms(timeout_ms);
 
     while (!time_reached(timeout))
     {
+        // BELANGRIJK: UART blijven verwerken
         while (uart_is_readable(UART_MODEM))
         {
             char c = uart_getc(UART_MODEM);
+            modem_feed_char(c);
+        }
 
-            putchar(c); // debug output
-
-            if (idx < sizeof(buffer) - 1)
-            {
-                buffer[idx++] = c;
-                buffer[idx] = 0;
-
-
-
-                if (strstr(buffer, response))
-                    return true;
-            }
+        if (modem_wait_flag)
+        {
+            modem_wait_match[0] = 0;
+            return true;
         }
     }
 
+    modem_wait_match[0] = 0;
     return false;
 }
 
@@ -80,7 +256,7 @@ void modem_send_sms(const char *number, const char *text)
     {
         uart_puts(UART_MODEM, text);
         uart_putc(UART_MODEM, 0x1A); // CTRL+Z
-        printf("\nSMS sent\n");
+        cprintf("[TC] SMS sent\n");
     }
 
     modem_wait_for("OK", 10000);
@@ -92,7 +268,7 @@ void modem_send_sms(const char *number, const char *text)
 
 void modem_init()
 {
-    printf("\n--- Modem init ---\n");
+    cprintf("[TC] Modem init\n");
 
     sleep_ms(6000); // modem boot time
     watchdog_update();
@@ -104,12 +280,12 @@ void modem_init()
         if (modem_wait_for("OK", 2000))
             break;
 
-        printf("No modem response, retry...\n");
+        cprintf("[TC] No modem response, retry...\n");
         sleep_ms(2000);
         watchdog_update();
     }
 
-    printf("\nModem responding\n");
+    cprintf("[TC] Modem responding\n");
 
     modem_send("ATE0");
     sleep_ms(200);
@@ -149,7 +325,7 @@ void modem_init_step2()
 
     watchdog_update();
 
-    printf("--- Modem init done ---\n\n");
+    cprintf("[TC] Modem init done\n");
     led_on(GPIO_LED_STATUS); 
 }
 
@@ -179,149 +355,9 @@ void extract_sms_number(const char *line, char *number)
 
 void modem_uart_task()
 {
-    command_t cmd;
-    char response[MAX_CMD_LEN];
-    static bool waiting_for_cmgr_text = false;
-    static char sms_text[COMMAND_SIZE];
-    static int sms_idx = 0;
-    static int last_sms_index = 0;
-
     while (uart_is_readable(UART_MODEM))
     {
         char c = uart_getc(UART_MODEM);
-
-        if (c == '\r' || c == '\n')
-        {
-            if (modem_line.index > 0)
-            {
-                modem_line.buffer[modem_line.index] = 0;
-
-                printf("MODEM: %s\n", modem_line.buffer);
-
-                /* ---------------- CMTI → SMS index ---------------- */
-                if (strstr(modem_line.buffer, "+CMTI:"))
-                {
-                    int index = atoi(strrchr(modem_line.buffer, ',') + 1);
-                    last_sms_index = index;
-
-                    char cmd_buf[32];
-                    sprintf(cmd_buf, "AT+CMGR=%d", index);
-                    modem_send(cmd_buf);
-                }
-
-                /* ---------------- CMGR header ---------------- */
-                else if (strstr(modem_line.buffer, "+CMGR:"))
-                {
-                    extract_sms_number(modem_line.buffer, sms_number);
-                    waiting_for_cmgr_text = true;
-                    sms_idx = 0;
-                    sms_text[0] = 0;
-                }
-
-                /* ---------------- SMS tekst regels ---------------- */
-                else if (waiting_for_cmgr_text)
-                {
-                    if (strcmp(modem_line.buffer, "OK") == 0)
-                    {
-                        // SMS compleet → command verwerken
-                        cmd = make_command(sms_text, SRC_SMS, sms_number);
-                        process_command(&cmd, response);
-
-                        waiting_for_cmgr_text = false;
-
-                        sleep_ms(1000);
-
-                        char cmd_buf[32];
-                        sprintf(cmd_buf, "AT+CMGD=%d", last_sms_index);
-                        modem_send(cmd_buf);
-                    }
-                    else
-                    {
-                        // tekst regel toevoegen
-                        int len = strlen(modem_line.buffer);
-
-                        if (sms_idx + len + 2 < sizeof(sms_text))
-                        {
-                            strcpy(&sms_text[sms_idx], modem_line.buffer);
-                            sms_idx += len;
-                            sms_text[sms_idx++] = '\n';
-                            sms_text[sms_idx] = 0;
-                        }
-                    }
-                }
-
-                /* ---------------- SIM status ---------------- */
-                else if (strstr(modem_line.buffer, "CPIN:"))
-                {
-                    if (strstr(modem_line.buffer, "SIM PIN"))
-                    {
-                        printf("Unlocking SIM...\n");
-
-                        char cmd_buf[32];
-                        sprintf(cmd_buf, "AT+CPIN=\"%s\"", cfg.sim_pin);
-                        modem_send(cmd_buf);
-                    }
-                    else if (strstr(modem_line.buffer, "READY"))
-                    {
-                        printf("SIM ready\n");
-
-                        // NU PAS modem verder initialiseren
-                        modem_init_step2();
-                    }
-                    else if (strstr(modem_line.buffer, "PUK"))
-                    {
-                        printf("SIM PUK required!\n");
-                        led_activate(GPIO_LED_ERROR, 100, 0);
-                        log_add("PUK ASKED", "", "system", false);
-                    }
-                }
-
-                /* ---------------- CME ERROR ---------------- */
-                else if (strstr(modem_line.buffer, "+CME ERROR"))
-                {
-                    printf("MODEM ERROR: %s\n", modem_line.buffer);
-
-                    if (strstr(modem_line.buffer, "incorrect password"))
-                    {
-                        printf("Wrong SIM PIN!\n");
-                        led_activate(GPIO_LED_ERROR, 200, 0);
-                        log_add("PIN WRONG", "", "system", false);
-                    }
-                }
-
-                /* ---------------- Network registratie ---------------- */
-                else if (strstr(modem_line.buffer, "+CREG:") ||
-                         strstr(modem_line.buffer, "+CGREG:") ||
-                         strstr(modem_line.buffer, "+CEREG:"))
-                {
-                    if (strstr(modem_line.buffer, ",1") ||
-                        strstr(modem_line.buffer, ",5"))
-                    {
-                        /* netwerk OK */
-                    }
-                    else
-                    {
-                        led_activate(GPIO_LED_ERROR, 500, 5000);
-                    }
-                }
-
-                /* ---------------- Netwerktijd ---------------- */
-                else if (strstr(modem_line.buffer, "+CTZV:") ||
-                         strstr(modem_line.buffer, "+CCLK:"))
-                {
-                    /* set clock */
-                    clock_set_clock(modem_line.buffer);
-                }
-
-                modem_line.index = 0;
-            }
-        }
-        else
-        {
-            if (modem_line.index < LINE_BUFFER_SIZE - 1)
-            {
-                modem_line.buffer[modem_line.index++] = c;
-            }
-        }
+        modem_feed_char(c);
     }
 }

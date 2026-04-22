@@ -14,6 +14,10 @@
 #define CMD_LEVEL_ADMIN   1
 #define CMD_LEVEL_CONSOLE 2
 
+/* info */
+#define INFO_LINES     6
+#define INFO_LINE_LEN  48
+
 typedef enum
 {
     CMD_UNKNOWN = 0,
@@ -25,14 +29,16 @@ typedef enum
     CMD_DEMOTE,
     CMD_UP,
     CMD_DOWN,
+    CMD_OVERHEAD,
     CMD_HELP,
     CMD_PIN,
+    CMD_SSID,
+    CMD_PASS,
     CMD_INFO,
     CMD_CLOSEAT,
     CMD_AT,
     CMD_LOG,
-    CMD_OVERHEAD,
-} command_id_t;
+ } command_id_t;
 
 typedef struct
 {
@@ -67,6 +73,8 @@ static void cmd_down(command_t *cmd, char *response);
 static void cmd_overhead(command_t *cmd, char *response);
 static void cmd_help(command_t *cmd, char *response);
 static void cmd_pin(command_t *cmd, char *response);
+static void cmd_ssid(command_t *cmd, char *response);
+static void cmd_pass(command_t *cmd, char *response);
 static void cmd_info(command_t *cmd, char *response);
 static void cmd_closeat(command_t *cmd, char *response);
 static void cmd_at(command_t *cmd, char *response);
@@ -74,5 +82,9 @@ static void cmd_log(command_t *cmd, char *response);
 
 int exec_cmd_add(const char *phonenr, const char *who);
 int exec_cmd_del(const char *phonenr, const char *who);
+int exec_cmd_promote(const char *phonenr, const char *who);
+int exec_cmd_demote(const char *phonenr, const char *who);
+int exec_cmd_swap(const char *phonenr, const char *who);
+void exec_cmd_info(char lines[INFO_LINES][INFO_LINE_LEN]);
 
 #endif

@@ -3,6 +3,7 @@
 #include "hardware/flash.h"
 #include "hardware/sync.h"
 #include "config.h"
+#include "console.h"
 
 const uint8_t *flash_config_contents = (const uint8_t *)(XIP_BASE + FLASH_CONFIG_OFFSET);
 
@@ -14,14 +15,20 @@ void config_init()
 
     if (cfg.magic != CONFIG_MAGIC || cfg.version != CONFIG_VERSION)
     {
-        printf("Config invalid, loading defaults\n");
+        cprintf("[TC] Config invalid, loading defaults\n");
 
         memset(&cfg, 0, sizeof(config_t));
         cfg.magic = CONFIG_MAGIC;
         cfg.version = CONFIG_VERSION;
 
+        strcpy(cfg.ssid, "SMSdoor");
+        strcpy(cfg.pass, "12345678");
+
         strcpy(cfg.sim_pin, "0000");
         cfg.close_time = CLOSE_DISABLED;
+
+        cfg.duration_shutter = 180;
+        cfg.duration_overhead = 1;
 
         config_save(cfg);
     }
@@ -43,6 +50,16 @@ void config_set_pin(const char *pin)
 {
     strncpy(cfg.sim_pin, pin, SIM_PIN_SIZE - 1);
     cfg.sim_pin[SIM_PIN_SIZE - 1] = 0;
+}
 
-    config_save();
+void config_set_ssid(const char *ssid)
+{
+    strncpy(cfg.ssid, ssid, WIFI_SSID_SIZE - 1);
+    cfg.ssid[WIFI_SSID_SIZE - 1] = 0;
+}
+
+void config_set_pass(const char *pass)
+{
+    strncpy(cfg.pass, pass, WIFI_PASS_SIZE - 1);
+    cfg.pass[WIFI_PASS_SIZE - 1] = 0;
 }

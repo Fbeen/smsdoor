@@ -53,6 +53,7 @@ add_executable(smsdoor
     src/console.c
     src/modem.c
     src/commands.c
+    src/tasks.c
     src/clock.c
     src/rshutter.c
     src/util.c

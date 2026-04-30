@@ -22,6 +22,11 @@ static uint32_t log_next_id = 1;
 static char linebuf[LOG_LEN];
 static int linepos = 0;
 
+uint32_t console_last_id(void)
+{
+    return log_next_id - 1;
+}
+
 static void log_add_line(const char *line)
 {
     console_entry_t *e = &log_buf[log_head];
@@ -34,33 +39,39 @@ static void log_add_line(const char *line)
     log_head = (log_head + 1) % LOG_LINES;
 }
 
-void console_write(const char *buf, int len)
+void console_write(const char *buf, int len, uint8_t out)
 {
     for(int i = 0; i < len; i++)
     {
         char c = buf[i];
 
-        // 1. altijd naar UART
-        uart_putc(UART_DEBUG, c);
+        // 1. naar UART
+        if(out & OUT_CONSOLE)
+            uart_putc(UART_DEBUG, c);
 
         // 2. line buffering
-        if(c == '\n')
-        {
-            linebuf[linepos] = '\0';
-            log_add_line(linebuf);
-            linepos = 0;
-        }
-        else
-        {
-            if(linepos < LOG_LEN - 1)
-                linebuf[linepos++] = c;
+        if(out & OUT_WIFI) {
+            if(c == '\n')
+            {
+                linebuf[linepos] = '\0';
+                log_add_line(linebuf);
+                linepos = 0;
+            }
+            else
+            {
+                if(linepos < LOG_LEN - 1)
+                    linebuf[linepos++] = c;
+            }
         }
     }
 }
 
-void cprintf(const char *fmt, ...)
+/*
+ * printf to console and or wifi buffer, depending on parameter out (OUT_CONSOLE, OUT_WIFI or OUT_BOTH)
+ */
+void csprintf(uint8_t out, const char *fmt, ...)
 {
-    char tmp[256];
+    char tmp[1024];
 
     va_list args;
     va_start(args, fmt);
@@ -70,7 +81,25 @@ void cprintf(const char *fmt, ...)
     if(len <= 0) return;
     if(len > sizeof(tmp)) len = sizeof(tmp);
 
-    console_write(tmp, len);
+    console_write(tmp, len, out);
+}
+
+/*
+ * printf to console and wifi buffer
+ */
+void cprintf(const char *fmt, ...)
+{
+    char tmp[1024];
+
+    va_list args;
+    va_start(args, fmt);
+    int len = vsnprintf(tmp, sizeof(tmp), fmt, args);
+    va_end(args);
+
+    if(len <= 0) return;
+    if(len > sizeof(tmp)) len = sizeof(tmp);
+
+    console_write(tmp, len, OUT_BOTH);
 }
 
 int console_get_since(uint32_t last_id, console_entry_t *out, int max)
@@ -101,7 +130,6 @@ void console_clear(void)
 
 void console_uart_task(void)
 {
-    char response[MAX_CMD_LEN];
     command_t cmd;
 
     while (uart_is_readable(UART_DEBUG))
@@ -115,7 +143,7 @@ void console_uart_task(void)
                 debug_line.buffer[debug_line.index] = 0;
 
                 cmd = make_command(debug_line.buffer, SRC_CONSOLE, "console");
-                process_command(&cmd, response);
+                process_command(&cmd);
 
                 debug_line.index = 0;
             }

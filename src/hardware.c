@@ -44,6 +44,11 @@ void gpio_setup()
     gpio_init(GPIO_OVERHEAD );
     gpio_disable_pulls(GPIO_OVERHEAD );  // important!
     gpio_set_dir(GPIO_OVERHEAD , GPIO_IN);   // high-Z
+
+    /* push button */
+    gpio_init(GPIO_BUTTON);
+    gpio_set_dir(GPIO_BUTTON, GPIO_IN);
+    gpio_pull_up(GPIO_BUTTON);
 }
 
 void roldeur_down_press()

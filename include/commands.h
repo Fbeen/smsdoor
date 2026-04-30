@@ -7,7 +7,7 @@
 
 #define SRC_CONSOLE 1
 #define SRC_SMS     2
-#define SRC_WEB     3
+#define SRC_WIFI    3
 
 /* command levels */
 #define CMD_LEVEL_USER    0
@@ -38,6 +38,7 @@ typedef enum
     CMD_CLOSEAT,
     CMD_AT,
     CMD_LOG,
+    CMD_WIFI,
  } command_id_t;
 
 typedef struct
@@ -48,7 +49,7 @@ typedef struct
     char sender[PHONENR_SIZE];  // telefoonnummer, of leeg bij console
 } command_t;
 
-typedef void (*cmd_func_t)(command_t *, char *);
+typedef bool (*cmd_func_t)(command_t *, char *);
 
 typedef struct
 {
@@ -59,32 +60,26 @@ typedef struct
 } command_entry_t;
 
 command_t make_command(char *line, uint8_t source, const char *sender);
-static void send_response(command_t *cmd, char *response);
+static void send_response(command_t *cmd, char *response, bool log);
 bool        command_allowed(command_t *cmd, uint8_t level);
-void        process_command(command_t *cmd, char *response);
-static void cmd_init(command_t *cmd, char *response);
-static void cmd_add(command_t *cmd, char *response);
-static void cmd_del(command_t *cmd, char *response);
-static void cmd_list(command_t *cmd, char *response);
-static void cmd_promote(command_t *cmd, char *response);
-static void cmd_demote(command_t *cmd, char *response);
-static void cmd_up(command_t *cmd, char *response);
-static void cmd_down(command_t *cmd, char *response);
-static void cmd_overhead(command_t *cmd, char *response);
-static void cmd_help(command_t *cmd, char *response);
-static void cmd_pin(command_t *cmd, char *response);
-static void cmd_ssid(command_t *cmd, char *response);
-static void cmd_pass(command_t *cmd, char *response);
-static void cmd_info(command_t *cmd, char *response);
-static void cmd_closeat(command_t *cmd, char *response);
-static void cmd_at(command_t *cmd, char *response);
-static void cmd_log(command_t *cmd, char *response);
-
-int exec_cmd_add(const char *phonenr, const char *who);
-int exec_cmd_del(const char *phonenr, const char *who);
-int exec_cmd_promote(const char *phonenr, const char *who);
-int exec_cmd_demote(const char *phonenr, const char *who);
-int exec_cmd_swap(const char *phonenr, const char *who);
-void exec_cmd_info(char lines[INFO_LINES][INFO_LINE_LEN]);
+void        process_command(command_t *cmd);
+static bool cmd_init(command_t *cmd, char *response);
+static bool cmd_add(command_t *cmd, char *response);
+static bool cmd_del(command_t *cmd, char *response);
+static bool cmd_list(command_t *cmd, char *response);
+static bool cmd_promote(command_t *cmd, char *response);
+static bool cmd_demote(command_t *cmd, char *response);
+static bool cmd_up(command_t *cmd, char *response);
+static bool cmd_down(command_t *cmd, char *response);
+static bool cmd_overhead(command_t *cmd, char *response);
+static bool cmd_help(command_t *cmd, char *response);
+static bool cmd_pin(command_t *cmd, char *response);
+static bool cmd_ssid(command_t *cmd, char *response);
+static bool cmd_pass(command_t *cmd, char *response);
+static bool cmd_info(command_t *cmd, char *response);
+static bool cmd_closeat(command_t *cmd, char *response);
+static bool cmd_at(command_t *cmd, char *response);
+static bool cmd_log(command_t *cmd, char *response);
+static bool cmd_wifi(command_t *cmd, char *response);
 
 #endif

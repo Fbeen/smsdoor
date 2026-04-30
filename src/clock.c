@@ -106,26 +106,35 @@ static void clock_add_second(void)
 
 /* ----------------------------------------------------------
    Set clock from modem string (+CCLK or +CTZV)
+   Supports timezone parsing in quarter-hours.
+   Examples:
+   +CCLK: "26/04/27,21:12:35+08"
+   +CTZV: +08,26/04/27,19:00:13
    ---------------------------------------------------------- */
 
 void clock_set_clock(char *buf)
 {
     int yy, MM, dd, hh, mm, ss;
+    int tz = 0;   /* timezone in quarter-hours */
 
     if (strstr(buf, "+CCLK:"))
     {
-        if (sscanf(buf, "+CCLK: \"%2d/%2d/%2d,%2d:%2d:%2d",
-                   &yy, &MM, &dd, &hh, &mm, &ss) != 6)
+        if (sscanf(buf,
+            "+CCLK: \"%2d/%2d/%2d,%2d:%2d:%2d%d",
+            &yy, &MM, &dd, &hh, &mm, &ss, &tz) != 7)
             return;
     }
     else if (strstr(buf, "+CTZV:"))
     {
-        if (sscanf(buf, "+CTZV: %*[^,],%2d/%2d/%2d,%2d:%2d:%2d",
-                   &yy, &MM, &dd, &hh, &mm, &ss) != 6)
+        if (sscanf(buf,
+            "+CTZV: %d,%2d/%2d/%2d,%2d:%2d:%2d",
+            &tz, &yy, &MM, &dd, &hh, &mm, &ss) != 7)
             return;
     }
     else
+    {
         return;
+    }
 
     /* ignore invalid modem clock */
     if (yy == 70)
@@ -134,17 +143,41 @@ void clock_set_clock(char *buf)
         return;
     }
 
+    /* --------------------------------------------------
+       Apply timezone if source is CTZV.
+       CTZV often gives UTC + timezone separately.
+       CCLK is usually already local time, so no correction.
+       -------------------------------------------------- */
+    if (strstr(buf, "+CTZV:"))
+    {
+        int total = (hh * 60) + mm + (tz * 15);
+
+        while (total < 0)
+        {
+            total += 1440;
+            dd--;
+        }
+
+        while (total >= 1440)
+        {
+            total -= 1440;
+            dd++;
+        }
+
+        hh = total / 60;
+        mm = total % 60;
+    }
+
     clock_dt.year  = 2000 + yy;
     clock_dt.month = MM;
     clock_dt.day   = dd;
     clock_dt.hour  = hh;
     clock_dt.min   = mm;
     clock_dt.sec   = ss;
-
     clock_dt.synced = true;
 
     cprintf("[TC] Clock synced: %02d-%02d-%04d %02d:%02d:%02d\n",
-           dd, MM, clock_dt.year, hh, mm, ss);
+        dd, MM, clock_dt.year, hh, mm, ss);
 }
 
 /* ----------------------------------------------------------

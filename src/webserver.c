@@ -13,6 +13,7 @@
 #include "router.h"
 #include "config.h"
 #include "console.h"
+#include "hardware.h"
 
 #define TCP_PORT 80
 #define CHUNK_SIZE 1024
@@ -23,6 +24,13 @@ typedef struct {
 } TCP_SERVER_T;
 
 static TCP_SERVER_T server_state;
+
+bool wifi_enabled = false;
+uint32_t wifi_timeout_ms = 0;
+
+static dhcp_server_t dhcp_server;
+static dns_server_t dns_server;
+
 
 /*
 Closes the TCP connection, unregisters callbacks,
@@ -219,6 +227,41 @@ static void ws_err(void *arg, err_t err)
         ws_close_connection(con_state, con_state->pcb, err);
 }
 
+/* for long polling */
+static err_t ws_poll(void *arg, struct tcp_pcb *pcb)
+{
+    TCP_CONNECT_STATE_T *state = (TCP_CONNECT_STATE_T *)arg;
+
+    if (!state)
+        return ERR_OK;
+
+    /* long polling actief? */
+    if (state->longpoll_active)
+    {
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+
+        /* nieuwe console regels beschikbaar */
+        if (console_last_id() > state->since)
+        {
+            send_console_json(state, pcb);   // jouw JSON sturen
+            state->longpoll_active = 0;
+            tcp_output(pcb);
+            return ERR_OK;
+        }
+
+        /* timeout 25 sec */
+        if (now - state->poll_start_ms >= 25000)
+        {
+            send_console_timeout(state, pcb);
+            state->longpoll_active = 0;
+            tcp_output(pcb);
+            return ERR_OK;
+        }
+    }
+
+    return ERR_OK;
+}
+
 /*
 Called when a new TCP client connects.
 Allocates a client state structure and registers
@@ -240,6 +283,7 @@ static err_t ws_accept(void *arg, struct tcp_pcb *client_pcb, err_t err)
     tcp_sent(client_pcb, ws_sent);
     tcp_recv(client_pcb, ws_recv);
     tcp_err(client_pcb, ws_err);
+    tcp_poll(client_pcb, ws_poll, 2);
 
     return ERR_OK;
 }
@@ -268,31 +312,112 @@ static bool ws_open(const char *ap_name)
     return true;
 }
 
-/*
-Initializes the webserver:
-- Starts WiFi Access Point
-- Starts DHCP server
-- Starts DNS captive portal
-- Opens TCP server on port 80
-*/
-void ws_init(void)
+void ws_stack_init(void)
 {
-    if (cyw43_arch_init()) {
+    if (cyw43_arch_init())
+    {
         cprintf("[TC] WiFi init failed\n");
         return;
     }
 
+    cprintf("[TC] WiFi driver ready\n");
+}
+
+void ws_start(void)
+{
+    ip4_addr_t mask;
+
     cyw43_arch_enable_ap_mode(cfg.ssid, cfg.pass, CYW43_AUTH_WPA2_AES_PSK);
 
-    ip4_addr_t mask;
     server_state.gw.addr = PP_HTONL(CYW43_DEFAULT_IP_AP_ADDRESS);
-    mask.addr = PP_HTONL(CYW43_DEFAULT_IP_MASK);
+    mask.addr            = PP_HTONL(CYW43_DEFAULT_IP_MASK);
 
-    static dhcp_server_t dhcp_server;
     dhcp_server_init(&dhcp_server, &server_state.gw, &mask);
-
-    static dns_server_t dns_server;
     dns_server_init(&dns_server, &server_state.gw);
 
     ws_open(cfg.ssid);
+}
+
+void ws_stop(void)
+{
+    // EERST netjes UDP services stoppen
+    dns_server_deinit(&dns_server);
+    dhcp_server_deinit(&dhcp_server);
+
+    // daarna TCP server
+    if (server_state.server_pcb)
+    {
+        tcp_close(server_state.server_pcb);
+        server_state.server_pcb = NULL;
+    }
+
+    // als laatste WiFi uit
+    cyw43_arch_disable_ap_mode();
+}
+
+void wifi_on_15min(void)
+{
+    if (!wifi_enabled)
+    {
+        ws_start();          // AP + DHCP + DNS + webserver
+        wifi_enabled = true;
+    }
+
+    wifi_timeout_ms = to_ms_since_boot(get_absolute_time()) + (15UL * 60UL * 1000UL);
+
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1); // pico led on
+}
+
+void wifi_off(void)
+{
+    if (!wifi_enabled)
+        return;
+
+    ws_stop();              // alles netjes stoppen
+
+    wifi_enabled = false;
+
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0); // pico led off
+}
+
+void wifi_task(void)
+{
+    if (wifi_enabled)
+    {
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+
+        if ((int32_t)(now - wifi_timeout_ms) >= 0)
+            wifi_off();
+    } else {
+        wifi_button_task();
+    }
+}
+
+void wifi_button_task(void)
+{
+    static uint32_t press_start = 0;
+    static bool active = false;
+
+    bool pressed = !gpio_get(GPIO_BUTTON);
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+
+    if (pressed)
+    {
+        if (!active)
+        {
+            active = true;
+            press_start = now;
+        }
+        else if (!wifi_enabled && (now - press_start >= 3000))
+        {
+            wifi_on_15min();
+            cprintf("[TC] WiFi enabled for 15 minutes\n\nLOGIN ON WIFI\nSSID: %s\nPASS: %s\n\n", cfg.ssid, cfg.pass);
+            active = false;   // voorkomt repeat
+        }
+    }
+    else
+    {
+        active = false;
+    }
 }

@@ -66,8 +66,8 @@ int main()
     /* loads the phonenumber whitelist from flash */
     phonebook_init();
 
-    /* start webserver */
-    ws_init();
+    /* webserver driver init, does not start the webserver */
+    ws_stack_init();
 
     watchdog_update();
 
@@ -81,6 +81,7 @@ int main()
         modem_uart_task();      /* see modem.c    */
         clock_task();           /* see clock.c    */
         rshutter_task();        /* see rshutter.c */
+        wifi_task();            /* see webserver.c */
 
         tight_loop_contents();
         watchdog_update();

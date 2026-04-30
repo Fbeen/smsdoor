@@ -17,5 +17,8 @@ typedef struct
 } route_t;
 
 void router_handle_request(const char *path, TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb);
+void send_console_timeout(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb);
+void send_console_json(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb);
+
 
 #endif

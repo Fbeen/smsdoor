@@ -96,19 +96,6 @@
                 margin: 0 10px;
             }
 
-            /* Status / Info */
-            .status {
-                display: none;
-                background: #222;
-                color: #00b0ff;
-                padding: 10px;
-                margin-top: 10px;
-                border-radius: 6px;
-            }
-            .status.show {
-                display: block;
-            }
-
             .info {
                 background: #181818;
                 padding: 10px;
@@ -148,17 +135,25 @@
 
             /* Console */
             .console {
-                display: flex;
-                flex-direction: column;
-                justify-content: flex-end;
-                white-space: pre-line;
                 background: #000;
                 height: 45vh;
                 overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+
                 padding: 10px;
+                border-radius: 6px;
+                box-sizing: border-box;
+            }
+
+            #console_content {
+                min-height: 100%;
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-end;
+
+                white-space: pre-line;
                 font-family: monospace;
                 font-size: 13px;
-                border-radius: 6px;
             }
 
             .console-input {
@@ -170,7 +165,42 @@
                 display: flex;
                 width: 100%;
             }
-            
+
+            select {
+                width: 100%;
+                box-sizing: border-box;
+                margin: 9px 0;
+                padding: 10px;
+                font-size: 16px;
+                background: #333;
+                border: 1px solid #aaa;
+                border-radius: 6px;
+                color: #fff;
+                appearance: none;
+                -webkit-appearance: none;
+            }
+
+            select:disabled {
+                background: #222;
+                color: #666;
+                border-color: #444;
+            }
+
+            input[type="checkbox"] {
+                width: 20px;
+                height: 20px;
+                margin: 0 8px 0 0;
+                accent-color: #00c853;
+                vertical-align: middle;
+            }
+
+            .checkbox-row {
+                align-items: center;
+                margin: 10px;
+                color: #eee;
+                font-size: 14px;
+            }
+
             input {
                 width: 100%;
                 box-sizing: border-box;
@@ -201,6 +231,29 @@
                 width: 70px;
                 margin-left: 5px;
             }
+
+            /* Status */
+            .status-global {
+                position: fixed;
+                bottom: 48px;   /* net boven navbar */
+                left: 0;
+                width: 100%;
+                box-sizing: border-box;
+
+                background: #222;
+                color: #00b0ff;
+                border-top: 1px #333 solid;
+
+                padding: 10px;
+                text-align: center;
+
+                display: none;
+                z-index: 999;
+            }
+
+            .status-global.show {
+                display: block;
+            }            
 
             /* Navbar */
             .navbar {
@@ -266,6 +319,12 @@
                 buttons.forEach(b => b.classList.remove('active'));
 
                 document.getElementById("btn_" + id).classList.add('active');
+
+                if (id === "console_section")
+                    scrollConsoleIfVisible();
+                
+                if (id === "home")
+                    updateInfo();   // info verversen
             }
         </script>
     </head>
@@ -334,8 +393,6 @@
             </div>
         </div>
 
-        <div class="status" id="status"></div>
-
         <div class="info">
             <b>INFO:</b>
             <div id="infohtml">Loading...</div>
@@ -351,7 +408,7 @@
         <div id="userlist"></div>
         
         <div class="console-input">
-            <form onsubmit="addPhone(); return false;">
+            <form autocomplete="off" onsubmit="addPhone(); return false;">
                 <input name="phonenr" type="text" placeholder="+31612345678">
                 <button type="submit">Add</button>
             </form>
@@ -361,7 +418,63 @@
     <!-- SETTINGS -->
     <div id="settings" class="section">
 
-        <form onsubmit="addPhone(); return false;">
+        <form autocomplete="off" onsubmit="addPhone(); return false;">
+            <h3 class="settings title-green">Auto sluiten</h3>
+
+            <div class="checkbox-row">
+                <input id="close_enabled" type="checkbox" onchange="toggleCloseTime()">
+                <label for="close_enabled">Dagelijks automatisch sluiten actief</label>
+            </div>
+            
+            <div class="row">
+                <div class="col">
+                    <label>Uur</label>
+                    <select id="close_hour">
+                        <option value="0">00</option>
+                        <option value="1">01</option>
+                        <option value="2">02</option>
+                        <option value="3">03</option>
+                        <option value="4">04</option>
+                        <option value="5">05</option>
+                        <option value="6">06</option>
+                        <option value="7">07</option>
+                        <option value="8">08</option>
+                        <option value="9">09</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="13">13</option>
+                        <option value="14">14</option>
+                        <option value="15">15</option>
+                        <option value="16">16</option>
+                        <option value="17">17</option>
+                        <option value="18">18</option>
+                        <option value="19">19</option>
+                        <option value="20">20</option>
+                        <option value="21">21</option>
+                        <option value="22">22</option>
+                        <option value="23">23</option>
+                    </select>
+                </div>
+
+                <div class="col">
+                    <label>Minuut</label>
+                    <select id="close_min">
+                        <option value="0">00</option>
+                        <option value="5">05</option>
+                        <option value="10">10</option>
+                        <option value="15">15</option>
+                        <option value="20">20</option>
+                        <option value="25">25</option>
+                        <option value="30">30</option>
+                        <option value="35">35</option>
+                        <option value="40">40</option>
+                        <option value="45">45</option>
+                        <option value="50">50</option>
+                        <option value="55">55</option>
+                    </select>
+                </div>
+            </div>
             <h3 class="settings title-green">Wifi</h3>
             <label>SSID</label>
             <input id="ssid" type="text" placeholder="smsdoor"><br>
@@ -377,18 +490,18 @@
             <input id="motor_time" type="number" placeholder="180"><br>
             <label>Schakeltijd overheaddeur (seconden)</label>
             <input id="garage_time" type="number" placeholder="180">
-            <button class="mg" onclick="saveSettings()">Opslaan</button>
+            <button id="btn_save_settings" class="mg" onclick="saveSettings(); return false;">Opslaan</button>
         </form>
     </div>
 
     <!-- CONSOLE -->
     <div id="console_section" class="section">
         <div id="console" class="console">
-            SMSDOOR console ready...
+            <div id="console_content"></div>
         </div>
 
         <div class="console-input">
-            <form onsubmit="consoleCommand(); return false;">
+            <form autocomplete="off" onsubmit="consoleCommand(); return false;">
                 <input name="command" type="text" placeholder="Command">
                 <button type="submit"><svg width="16" height="16"><use href="#icon-send"/></svg></button>
             </form>
@@ -415,7 +528,7 @@
             <div class="help-desc">Zet de dagelijkse automatische sluitingstijd uit.</div>
         </div>
 
-        <h3 class="title-blue">Toegang</h3>
+        <h3 class="title-blue">Gebruikers</h3>
         <div class="help-list">
             <div class="help-cmd">ADD &lt;telnr&gt;</div>
             <div class="help-desc">Voeg een telefoonnr toe.</div>
@@ -455,6 +568,9 @@
 
             <div class="help-cmd">LOG</div>
             <div class="help-desc">Laat de laatste gebeurtenissen zien.</div>
+
+            <div class="help-cmd">WIFI ON/OFF</div>
+            <div class="help-desc">Zet wifi aan of uit. Na 15 minuten schakelt de wifi vanzelf weer uit.</div>
         </div>
 
         <div class="info" style="margin-top:15px;">
@@ -462,6 +578,8 @@
         </div>
 
     </div>
+    
+    <div class="status-global" id="status"></div>
 
     <!-- NAVBAR -->
     <div class="navbar">
@@ -487,243 +605,370 @@
 
     </div>
 
-   <script>
-   let statusTimer = null;
-   let since = 0;
+    <script>
+    let doorOnline = true;
+    let pingBusy = false;
+    let statusTimer = null;
+    let since = 0;
 
-   // ================= INIT =================
+    // ================= INIT =================
 
-   window.addEventListener("load", () => {
-       initEventListeners();
-       loadState();
-       setInterval(updateInfo, 60000);
-   });
+    window.addEventListener("load", () => {
+        initEventListeners();
+        loadState();
+        setInterval(updateInfo, 60000);
+        startPingWatchdog();
+    });
 
- /*   
     (function() {
-        const desired = "smsdoor";
-        const fallback = "192.168.4.1";
-        const current = window.location.hostname;
+         const desired = "smsdoor";
+         const fallback = "192.168.4.1";
+         const current = window.location.hostname;
 
-        // voorkom redirect loops + accepteer subdomeinen
-        if (!current.includes(desired) && current !== fallback) {
-            window.location.replace("http://" + desired + "/");
-        }
-    })();
+         // voorkom redirect loops + accepteer subdomeinen
+         if (!current.includes(desired) && current !== fallback) {
+             window.location.replace("http://" + desired + "/");
+         }
+     })();
 
-*/
-   // ================= STATE =================
-
-    function loadState()
+    function startPingWatchdog()
     {
-        fetch("/status")
-            .then(r => r.json())
-            .then(data => {
-
-                if (data.users) renderUsers(data.users);
-                if (data.settings) renderSettings(data.settings);
-                if (data.info) renderInfo(data.info);
-
-                if (data.console) {
-                    since = data.console.since || 0;
-                    renderConsoleFull(data.console.logs);
-                }
-
-                consoleLoop();
-            });
+        setInterval(checkPing, 5000);
     }
 
-   // ================= INFO =================
+    function checkPing()
+    {
+        if (pingBusy) return;
 
-   function renderInfo(info)
-   {
-       let html = info.join("<br>");
-       infohtml.innerHTML = html;
-   }
+        pingBusy = true;
 
-   function updateInfo()
-   {
-       fetch("/info")
-           .then(r => r.json())
-           .then(data => {
-               renderInfo(data.info);
-           })
-           .catch(() => infohtml.innerHTML = "Status error");
-   }
+        const ctrl = new AbortController();
 
-   // ================= USERS =================
+        const timer = setTimeout(() => ctrl.abort(), 2000);
 
-   function renderUsers(users)
-   {
-       let html = ``;
+        fetch("/ping", {
+            cache: "no-store",
+            signal: ctrl.signal
+        })
+        .then(r => r.json())
+        .then(data => {
+            clearTimeout(timer);
 
-       users.forEach(u => {
-           html += `<div class="user">
-               <div>
-                   ${u.nr}${u.admin ? " *" : ""}
-               </div>
-               <div>
-                   <button class="icon-btn btn-del" data-id="${u.nr}">
-                       <svg width="16" height="16"><use href="#icon-del"/></svg>
-                   </button>
-                   <button class="icon-btn btn-adm" data-id="${u.nr}">
-                       <svg width="16" height="16"><use href="#icon-admin"/></svg>
-                   </button>
-               </div>
-           </div>`;
-       });
+            if (data.status === "ok")
+                setDoorOnline(true);
+            else
+                setDoorOnline(false);
+        })
+        .catch(() => {
+            clearTimeout(timer);
+            setDoorOnline(false);
+        })
+        .finally(() => {
+            pingBusy = false;
+        });
+    }
+    
+    function setDoorOnline(state)
+    {
+        if (state === doorOnline) return;
 
-       userlist.innerHTML = html;
-   }
+        doorOnline = state;
 
-   function updateUsers()
-   {
-       fetch("/users")
-           .then(r => r.json())
-           .then(data => renderUsers(data.users));
-   }
+        if (!state)
+        {
+            showStatusSticky("Geen verbinding");
+        }
+        else
+        {
+            showStatus("Verbinding hersteld");
+        }
+    }
 
-   // ================= SETTINGS =================
+    function showStatusSticky(msg)
+    {
+        const el = document.getElementById("status");
 
-   function renderSettings(s)
-   {
-       ssid.value = s.ssid || "";
-       wifi_pass.value = s.password || "";
-       sim_pin.value = s.simpin || "";
-       motor_time.value = s.door || "";
-       garage_time.value = s.overhead || "";
-   }
+        el.textContent = msg;
+        el.classList.add("show");
 
-   function saveSettings()
-   {
-       fetch(`/settings/update?ssid=${encodeURIComponent(ssid.value)}`
-           + `&password=${encodeURIComponent(wifi_pass.value)}`
-           + `&simpin=${encodeURIComponent(sim_pin.value)}`
-           + `&door=${motor_time.value}`
-           + `&overhead=${garage_time.value}`)
-       .then(r => r.json())
-       .then(d => {
-           if (d.status === "ok") {
-               showStatus("Settings opgeslagen");
-           } else {
-               alert(d.errors.join("\n"));
-           }
-       });
-   }
+        if (statusTimer)
+            clearTimeout(statusTimer);
+    }
 
-   // ================= CONSOLE =================
+    // ================= STATE =================
 
-   function renderConsoleFull(logs)
-   {
-       let c = document.getElementById("console");
-       c.textContent = logs.join("\n");
-       c.scrollTop = c.scrollHeight;
-   }
+     function loadState()
+     {
+         fetch("/status")
+             .then(r => r.json())
+             .then(data => {
 
-   function appendConsole(logs)
-   {
-       let c = document.getElementById("console");
+                 if (data.users) renderUsers(data.users);
+                 if (data.settings) renderSettings(data.settings);
+                 if (data.info) renderInfo(data.info);
 
-       logs.forEach(line => {
-           c.textContent += line + "\n";
-       });
+                 if (data.console) {
+                     since = data.console.since || 0;
+                     renderConsoleFull(data.console.logs);
+                 }
 
-       // max 50 regels houden
-       let lines = c.textContent.split("\n");
-       if (lines.length > 50) {
-           c.textContent = lines.slice(-50).join("\n");
-       }
+                 consoleLoop();
+             });
+     }
 
-       c.scrollTop = c.scrollHeight;
-   }
+    // ================= INFO =================
 
-   function consoleLoop()
-   {
-       fetch("/console?since=" + since)
-           .then(r => r.json())
-           .then(data => {
-               if (data.console.changed) {
-                   appendConsole(data.console.logs);
-                   since = data.console.since;
-               }
-           })
-           .catch(() => {})
-           .finally(() => consoleLoop());
-   }
+    function renderInfo(info)
+    {
+        let html = info.join("<br>");
+        infohtml.innerHTML = html;
+    }
 
-   // ================= COMMAND =================
+    function updateInfo()
+    {
+        fetch("/info")
+            .then(r => r.json())
+            .then(data => {
+                renderInfo(data.info);
+            })
+            .catch(() => infohtml.innerHTML = "Status error");
+    }
 
-   function consoleCommand()
-   {
-       let p = document.querySelector('[name="command"]');
-       let cmd = p.value;
+    // ================= USERS =================
 
-       fetch("/console/cmd?c=" + encodeURIComponent(cmd))
-           .then(() => {
-               appendConsole(["> " + cmd]);
-           });
+    function renderUsers(users)
+    {
+        let html = ``;
 
-       p.value = "";
-   }
+        users.forEach(u => {
+            html += `<div class="user">
+                <div>
+                    ${u.nr}${u.admin ? " *" : ""}
+                </div>
+                <div>
+                    <button class="icon-btn btn-del" data-id="${u.nr}">
+                        <svg width="16" height="16"><use href="#icon-del"/></svg>
+                    </button>
+                    <button class="icon-btn btn-adm" data-id="${u.nr}">
+                        <svg width="16" height="16"><use href="#icon-admin"/></svg>
+                    </button>
+                </div>
+            </div>`;
+        });
 
-   // ================= USERS ACTIONS =================
+        userlist.innerHTML = html;
+    }
 
-   function initEventListeners()
-   {
-       document.getElementById("users").addEventListener("click", e => {
+    function updateUsers()
+    {
+        fetch("/users")
+            .then(r => r.json())
+            .then(data => renderUsers(data.users));
+    }
 
-           let del = e.target.closest(".btn-del");
-           if (del) {
-               return fetch("/users/del?nr=" + encodeURIComponent(del.dataset.id))
-                   .then(() => updateUsers());
-           }
+    // ================= SETTINGS =================
 
-           let adm = e.target.closest(".btn-adm");
-           if (adm) {
-               return fetch("/users/adm?nr=" + encodeURIComponent(adm.dataset.id))
-                   .then(() => updateUsers());
-           }
-       });
+     function toggleCloseTime()
+     {
+         let enabled = document.getElementById("close_enabled").checked;
 
-       document.addEventListener("touchstart", function(){}, true);
-   }
+         document.getElementById("close_hour").disabled = !enabled;
+         document.getElementById("close_min").disabled  = !enabled;
+     }
 
-   // ================= UI =================
+     function renderSettings(s)
+     {
+        ssid.value = s.ssid || "";
+        wifi_pass.value = s.password || "";
+        sim_pin.value = s.simpin || "";
+        motor_time.value = s.door || "";
+        garage_time.value = s.overhead || "";
 
-   function sendCmd(url)
-   {
-       fetch(url)
-           .then(r => r.text())
-           .then(showStatus)
-           .catch(() => showStatus("Command failed"));
-   }
+        close_enabled.checked = s.close_enabled;
+        close_hour.value = s.close_hour;
+        close_min.value = s.close_min;
 
-   function showStatus(msg)
-   {
-       const el = document.getElementById("status");
+        toggleCloseTime();
+     }
 
-       el.textContent = msg;
-       el.classList.add("show");
+    function saveSettings()
+    {
+        let btn = document.getElementById("btn_save_settings");
 
-       if (statusTimer) clearTimeout(statusTimer);
+        btn.disabled = true;
+        btn.textContent = "Opslaan...";
 
-       statusTimer = setTimeout(() => {
-           el.classList.remove("show");
-       }, 5000);
-   }
+        let enabled = close_enabled.checked ? 1 : 0;
 
-   function addPhone()
-   {
-       let p = document.querySelector('[name="phonenr"]');
+        fetch(`/settings/update?ssid=${encodeURIComponent(ssid.value)}`
+            + `&password=${encodeURIComponent(wifi_pass.value)}`
+            + `&simpin=${encodeURIComponent(sim_pin.value)}`
+            + `&door=${motor_time.value}`
+            + `&overhead=${garage_time.value}`
+            + `&close_enabled=${enabled}`
+            + `&close_hour=${close_hour.value}`
+            + `&close_min=${close_min.value}`)
+        .then(r => r.json())
+        .then(d => {
 
-       fetch("/users/add?nr=" + encodeURIComponent(p.value))
-           .then(r => r.json())
-           .then(() => {
-               p.value = "";
-               updateUsers();
-           });
-   }
-   </script>
-        
+            if (d.status === "ok")
+            {
+                btn.textContent = "Opgeslagen ✓";
+                showStatus("Instellingen opgeslagen");
+            }
+            else if (d.status === "reset")
+            {
+                showStatusSticky("Restarting...");
+                fetch("/reset/now").catch(() => {});
+            } else
+            {
+                btn.textContent = "Fout";
+                alert(d.errors.join("\n"));
+            }
+
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.textContent = "Opslaan";
+            }, 1500);
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.textContent = "Opslaan";
+            showStatus("Opslaan mislukt");
+        });
+    }    
+    
+    // ================= CONSOLE =================
+
+     function scrollConsoleIfVisible()
+     {
+         const tab = document.getElementById("console_section");
+
+         if (tab.classList.contains("active"))
+         {
+             const box = document.getElementById("console");
+             box.scrollTop = box.scrollHeight;
+         }
+     }
+
+     function renderConsoleFull(logs)
+     {
+         let box = document.getElementById("console");
+         let c   = document.getElementById("console_content");
+
+         c.textContent = logs.join("\n");
+
+         if (logs.length)
+             c.textContent += "\n";
+
+         scrollConsoleIfVisible();
+     }
+
+     function appendConsole(logs)
+     {
+         let box = document.getElementById("console");
+         let c   = document.getElementById("console_content");
+
+         logs.forEach(line => {
+             c.textContent += line + "\n";
+         });
+
+         // max 50 regels houden
+         let lines = c.textContent.split("\n");
+
+         if (lines.length > 50) {
+             c.textContent = lines.slice(-50).join("\n");
+         }
+
+         // scroll container naar beneden
+         scrollConsoleIfVisible();
+     }
+
+     function consoleLoop()
+     {
+        fetch("/console?since=" + since)
+            .then(r => r.json())
+            .then(data => {
+                if (data.console.changed) {
+                    appendConsole(data.console.logs);
+                    since = data.console.since;
+                }
+            })
+            .catch(() => {})
+            .finally(() => consoleLoop());
+    }
+
+    // ================= COMMAND =================
+
+    function consoleCommand()
+    {
+        let p = document.querySelector('[name="command"]');
+        let cmd = p.value;
+
+        fetch("/console/cmd?c=" + encodeURIComponent(cmd));
+
+        p.value = "";
+    }
+
+    // ================= USERS ACTIONS =================
+
+    function initEventListeners()
+    {
+        document.getElementById("users").addEventListener("click", e => {
+
+            let del = e.target.closest(".btn-del");
+            if (del) {
+                return fetch("/users/del?nr=" + encodeURIComponent(del.dataset.id))
+                    .then(() => updateUsers());
+            }
+
+            let adm = e.target.closest(".btn-adm");
+            if (adm) {
+                return fetch("/users/adm?nr=" + encodeURIComponent(adm.dataset.id))
+                    .then(() => updateUsers());
+            }
+        });
+
+        document.addEventListener("touchstart", function(){}, true);
+    }
+
+    // ================= UI =================
+
+    function sendCmd(url)
+    {
+        fetch(url)
+            .then(r => r.text())
+            .then(showStatus)
+            .catch(() => showStatus("Command failed"));
+    }
+
+    function showStatus(msg)
+    {
+        const el = document.getElementById("status");
+
+        el.textContent = msg;
+        el.classList.add("show");
+
+        if (statusTimer)
+            clearTimeout(statusTimer);
+
+        statusTimer = setTimeout(() => {
+            el.classList.remove("show");
+        }, 2000);
+    }
+
+    function addPhone()
+    {
+        let p = document.querySelector('[name="phonenr"]');
+
+        fetch("/users/add?nr=" + encodeURIComponent(p.value))
+            .then(r => r.json())
+            .then(() => {
+                p.value = "";
+                updateUsers();
+            });
+    }
+    </script>
+
 </body>
 </html>

@@ -21,7 +21,9 @@
 #define GPIO_LED_ERROR  19
 #define GPIO_LED_PICO   25
 
-#define GPIO_OVERHEAD   99
+#define GPIO_OVERHEAD   28
+
+#define GPIO_BUTTON     2
 
 /* output pins */
 

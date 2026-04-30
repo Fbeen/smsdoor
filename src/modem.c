@@ -45,7 +45,6 @@ void modem_feed_char(char c)
     static int last_sms_index = 0;
 
     command_t cmd;
-    char response[MAX_CMD_LEN];
 
     /* ready to send sms body text */
     if (modem_wait_match[0] == '>' && c == '>')
@@ -61,17 +60,17 @@ void modem_feed_char(char c)
 
         modem_line.buffer[modem_line.index] = 0;
 
-        // 🔥 filter rommel
+        // filter rommel
         if (strlen(modem_line.buffer) == 0)
         {
             modem_line.index = 0;
             return;
         }
 
-        // 🔥 logging
+        // logging
         cprintf("[FM] %s\n", modem_line.buffer);
 
-        // 🔥 WAIT MATCH (belangrijk!)
+        // WAIT MATCH (belangrijk!)
         if (modem_wait_match[0] &&
             strstr(modem_line.buffer, modem_wait_match))
         {
@@ -125,7 +124,7 @@ void modem_feed_char(char c)
 
                 /* nu pas command uitvoeren */
                 cmd = make_command(sms_copy, SRC_SMS, number_copy);
-                process_command(&cmd, response);
+                process_command(&cmd);
 
                 sleep_ms(1000);
 

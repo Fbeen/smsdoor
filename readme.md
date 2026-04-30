@@ -1,313 +1,136 @@
-# SMSDOOR – GSM Rolluik & Overhead Door Controller (RP2040 + A7670E)
+# SMSDOOR – GSM + WiFi Door & Roller Shutter Controller  
+(RP2040 + A7670E + Pico W)
 
-SMSDOOR is a GSM/SMS controlled door and roller shutter controller based on a Raspberry Pi Pico (RP2040) and a SIMCom A7670E 4G modem.  
-The system allows authorized users to control a roller shutter or overhead garage door via SMS commands. It also includes a phonebook with user/admin permissions, logging, and automatic closing schedules.
+SMSDOOR is a hybrid GSM (SMS) and via WiFi Access Point configurated door and roller shutter controller based on a Raspberry Pi Pico / Pico W (RP2040) and a SIMCom A7670E 4G modem.
+
+The system allows authorized users to control a roller shutter or overhead garage door via:
+- SMS
+- Built-in WiFi web interface
+- Serial console
 
 ---
 
 # Features
-- Control roller shutter via SMS
-- Control overhead garage door via SMS
-- Phonebook with user and admin roles
-- Automatic daily closing time
-- Event logging
-- SIM PIN storage in flash
-- Modem AT command passthrough (console)
-- Console interface via UART/USB
-- Non-blocking firmware design
-- Flash storage for configuration and phonebook
+
+## Control
+- Roller shutter control (UP / DOWN)
+- Overhead garage door control (DOWN)
+- Control via SMS, Web UI, or Console
+
+## Connectivity
+- LTE modem (SMS control)
+- WiFi Access Point (Pico W)
+- Built-in webserver (mobile friendly UI)
 
 ---
 
 # Hardware
-## Main components
-- Raspberry Pi Pico (RP2040)
-- SIMCom A7670E LTE modem
-- Relay outputs for shutter/door control
-- External 5V power supply (2 or 3 ampere recommanded)
-- UART connection between Pico and modem
 
-## UART connections
+## Main components
+- Raspberry Pi Pico / Pico W
+- SIMCom A7670E LTE modem
+- Relay outputs
+- External 5V power supply (2–3A recommended)
+
+## ⚠️ Power note
+
+WiFi + LTE modem can cause current spikes.  
+Use a stable 5V / 2A–3A supply. PC USB is often not sufficient.
+
+---
+
+# UART connections
+
 | Function | Pico Pin |
 |----------|----------|
 | Debug TX | GP0 |
 | Debug RX | GP1 |
-| Modem TX | GP4 |
-| Modem RX | GP5 |
+| Modem TX | GP20 |
+| Modem RX | GP21 |
 
 ---
 
-# Installation
-## Build
-Requires:
-- Pico SDK
-- CMake
-- Ninja
-- ARM GCC toolchain
-
-Build steps:
+# Build
 
     mkdir build
     cd build
     cmake ..
     ninja
 
-UF2 file will be generated in the build folder.
-
-Flash by holding BOOTSEL while plugging USB and copying the UF2 file.
-
-**or make it simple and install Visual Studio Code**
 ---
 
-# First Start / Initialization
-When the system is started for the first time, the phonebook is empty.
+# First Start
 
 Send SMS:
 
     INIT
 
-The sender of this SMS becomes the first admin.
-
-After initialization, only known phone numbers are allowed to control the system.
+Sender becomes admin.
 
 ---
 
-# User Roles
+# Commands
 
-## User
-Allowed commands:
-- UP
-- DOWN
+## Door
 
-## Admin
-Admins can also:
-- Close overhead door
-- add and delete users
-- list users
-- promote and demote admins
-- change automatic close time
-- ask system information
-- ask log
-
-## Console Only
-Only via serial console:
-- set SIM pin code
-- send modem commands directly to the A7670 modem
+    UP                  Roller shutter up
+    DOWN                Roller shutter down
+    OVERHEAD DOWN       Close overhead door
+    CLOSEAT <hh:mm>     Auto close roller shutter and  overhead door daily on a given time
+    CLOSEAT OFF         auto close off
 
 ---
 
-# Command Reference
+# Phonebook
 
-## Door control
-
-### UP
-Open the roller shutter.
-
-Aliases: UP, OPEN, OMHOOG, OP
-
-### DOWN
-Close the roller shutter.
-
-Aliases: DOWN, DICHT, OMLAAG, CLOSE, NEER
+    ADD +31612345678    adds a phonenumber to the phonebook
+    DEL +31612345678    deletes a phonenumber from the phonebook
+    LIST                lists all phonenumbers 
 
 ---
 
-## Overhead garage door
+# Admin
 
-### OVERHEAD DOWN
-Closes the overhead garage door.
-
-Also accepted: GARAGE DOWN, GARAGE DICHT, GARAGE OMLAAG, GARAGE CLOSE, GARAGE NEER, OVERHEAD DICHT, OVERHEAD OMLAAG, OVERHEAD CLOSE, OVERHEAD NEER
+    PROMOTE +31612345678    promote a number to an administrator
+    DEMOTE +31612345678     demote a number to a normal user (only open/close)
 
 ---
 
-# Automatic Closing
+# System
 
-### Set automatic closing time
-
-    CLOSEAT 21:30
-
-### Disable automatic closing
-
-    CLOSEAT OFF
-
-The time is stored in flash and constantly monitored.
-
----
-
-# Phonebook Commands
-
-### Add user
-
-    ADD +31612345678
-
-The new user will receive a welcome SMS.
-
-### Remove user
-
-    DEL +31612345678
-
-Restrictions:
-- You cannot delete your own number via SMS
-- You cannot delete the last admin
-
-### List users
-
-    LIST
-
-Admins are marked with *
-
-Example:
-
-    +31611111111 *
-    +31622222222
-    Total numbers: 2
+    PIN <code> *        Set a new PIN code to unlock the SIM card
+    SIDD <name>         Set a new SSID for the WiFi AP
+    PASS <passwd>       Set a new password for the WiFi AP
+    AT <command> *      Send a command directly to the A7670E modem
+    INFO                gives some system information
+    LOG                 gives a log about most important events
+    HELP                gives help information
+    WIFI ON/OFF         switch on the WiFi AP for 15 minutes or switches off
 
 ---
 
-# Admin Management
+# WiFi & Web Interface
 
-### Promote user to admin
-
-    PROMOTE +31612345678
-
-The promoted user receives a notification SMS.
-
-### Demote admin to user
-
-    DEMOTE +31612345678
-
-Restrictions:
-- You cannot demote yourself
-- You cannot demote the last admin
+- Access point (default 192.168.4.1)
+- Mobile UI
+- Door control and system information
+- User management
+- Settings configuration
+- Console (live log)
+- Help page
 
 ---
 
-# System Commands
+# Notes
 
-### INFO
-Shows system information:
-- Firmware version
-- Uptime
-- System time
-- Number of users/admins
-- Automatic close time
-
-    INFO
-
-Example output:
-
-    SMSDOOR v1.0
-    Uptime: 01:23:45
-    System time: 28-03-2026 17:42
-    Users 3 Admins 1
-    Auto close time: 21:30
-
-### LOG
-Shows recent events.
-
-Via SMS → last events  
-Via console → full log
-
-    LOG
-
----
-
-# Console Commands
-
-These commands only work via serial console.
-
-### Store SIM PIN
-
-    PIN 1234
-
-Rules:
-- Must be numeric
-- Must be 4–6 digits
-
-After storing the PIN:
-- The modem is reset
-- The Pico reboots
-
-### Send AT command directly to modem
-
-    AT AT+CSQ
-    AT AT+CCLK?
-    AT ATI
-
----
-
-# Logging
-The system logs:
-- Initialization
-- User added
-- User removed
-- User promoted
-- User demoted
-- Shutter up/down
-- Overhead door close
-- Auto close changes
-- PIN changes
-
-View log with:
-
-    LOG
-
----
-
-# Security Model
-SMS commands are only accepted when:
-1. Sender number exists in the phonebook
-2. Sender has correct permission level (user vs admin)
-3. Console-only commands are blocked via SMS
-
-This acts as a simple firewall for SMS control.
-
----
-
-# Example Workflow
-
-Initialize system:
-
-    INIT
-
-Add users:
-
-    ADD +31611111111
-    ADD +31622222222
-
-Promote a user:
-
-    PROMOTE +31622222222
-
-Set automatic closing:
-
-    CLOSEAT 22:00
-
-Daily use:
-
-    UP
-    DOWN
-    OVERHEAD DOWN
-    INFO
-    LOG
-
----
-
-# Project Structure
-
-    .
-    ├── src       (c code files)
-    ├── include   (header files)
-    └── hardware  (KiCad files)
-
----
-
-# License
-Open-source project. Use at your own risk.
+- Non-blocking firmware
+- Flash storage
+- Designed for stability
 
 ---
 
 # Author
+
 Frank Beentjes  
 https://github.com/Fbeen
+

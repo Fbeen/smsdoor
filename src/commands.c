@@ -440,6 +440,7 @@ static bool cmd_help(command_t *cmd, char *response)
         "AT <command> *   Stuur een commando rechtstreeks naar de A7670E modem.\n"
         "INFO             Vraag systeem informatie op.\n"
         "LOG              Laat de laatste gebeurtenissen zien.\n"
+        "WIFI ON/OFF      Zet WiFi aan voor 15 minuten of uit.\n"
         "\n"
         "* console only\n\n");
 

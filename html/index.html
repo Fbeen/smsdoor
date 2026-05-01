@@ -255,7 +255,12 @@
                 display: block;
             }            
 
+            .status-global.err {
+                color: #ff3b30;   /* alleen tekst rood */
+            }
+            
             /* Navbar */
+
             .navbar {
                 position: fixed;
                 bottom: 0;
@@ -382,14 +387,14 @@
         <div class="row">
             <div class="col">
                 <h3 class="title-green">Rolluik</h3>
-                <button onclick="sendCmd('/open')">UP</button>
-                <button class="red" onclick="sendCmd('/close')">DOWN</button>
+                <button onclick="apiJson('/open')">UP</button>
+                <button class="red" onclick="apiJson('/close')">DOWN</button>
             </div>
 
             <div class="col">
                 <h3 class="title-blue">Overheaddeur</h3>
                 <button class="disabled">UP</button>
-                <button class="red" onclick="sendCmd('/overhead')">DOWN</button>
+                <button class="red" onclick="apiJson('/overhead')">DOWN</button>
             </div>
         </div>
 
@@ -620,16 +625,18 @@
         startPingWatchdog();
     });
 
+    // Force access via the local hostname ("smsdoor") instead of IP.
+    // Ensures consistent URLs and works with the built-in DNS/captive portal.
     (function() {
-         const desired = "smsdoor";
-         const fallback = "192.168.4.1";
-         const current = window.location.hostname;
+        const desired = "smsdoor";
+        const current = window.location.hostname;
 
-         // voorkom redirect loops + accepteer subdomeinen
-         if (!current.includes(desired) && current !== fallback) {
-             window.location.replace("http://" + desired + "/");
-         }
-     })();
+        if (current !== desired) {
+            window.location.replace("http://" + desired + "/");
+        }
+    })();
+
+    // ================= PING / CONNECTIVITY =================
 
     function startPingWatchdog()
     {
@@ -643,31 +650,18 @@
         pingBusy = true;
 
         const ctrl = new AbortController();
-
         const timer = setTimeout(() => ctrl.abort(), 2000);
 
-        fetch("/ping", {
-            cache: "no-store",
-            signal: ctrl.signal
-        })
-        .then(r => r.json())
-        .then(data => {
-            clearTimeout(timer);
-
-            if (data.status === "ok")
-                setDoorOnline(true);
-            else
-                setDoorOnline(false);
-        })
-        .catch(() => {
-            clearTimeout(timer);
-            setDoorOnline(false);
-        })
-        .finally(() => {
-            pingBusy = false;
-        });
+        fetch("/ping", { cache: "no-store", signal: ctrl.signal })
+            .then(r => r.json())
+            .then(d => setDoorOnline(d.status === "ok"))
+            .catch(() => setDoorOnline(false))
+            .finally(() => {
+                clearTimeout(timer);
+                pingBusy = false;
+            });
     }
-    
+
     function setDoorOnline(state)
     {
         if (state === doorOnline) return;
@@ -675,76 +669,53 @@
         doorOnline = state;
 
         if (!state)
-        {
             showStatusSticky("Geen verbinding");
-        }
         else
-        {
             showStatus("Verbinding hersteld");
-        }
-    }
-
-    function showStatusSticky(msg)
-    {
-        const el = document.getElementById("status");
-
-        el.textContent = msg;
-        el.classList.add("show");
-
-        if (statusTimer)
-            clearTimeout(statusTimer);
     }
 
     // ================= STATE =================
 
-     function loadState()
-     {
-         fetch("/status")
-             .then(r => r.json())
-             .then(data => {
+    function loadState()
+    {
+        fetch("/status")
+            .then(r => r.json())
+            .then(d => {
+                if (d.users) renderUsers(d.users);
+                if (d.settings) renderSettings(d.settings);
+                if (d.info) renderInfo(d.info);
 
-                 if (data.users) renderUsers(data.users);
-                 if (data.settings) renderSettings(data.settings);
-                 if (data.info) renderInfo(data.info);
+                if (d.console) {
+                    since = d.console.since || 0;
+                    renderConsoleFull(d.console.logs);
+                }
 
-                 if (data.console) {
-                     since = data.console.since || 0;
-                     renderConsoleFull(data.console.logs);
-                 }
-
-                 consoleLoop();
-             });
-     }
+                consoleLoop();
+            });
+    }
 
     // ================= INFO =================
 
     function renderInfo(info)
     {
-        let html = info.join("<br>");
-        infohtml.innerHTML = html;
+        infohtml.innerHTML = info.join("<br>");
     }
 
     function updateInfo()
     {
         fetch("/info")
             .then(r => r.json())
-            .then(data => {
-                renderInfo(data.info);
-            })
-            .catch(() => infohtml.innerHTML = "Status error");
+            .then(d => renderInfo(d.info))
+            .catch(() => showStatus("Info fout", true));
     }
 
     // ================= USERS =================
 
     function renderUsers(users)
     {
-        let html = ``;
-
-        users.forEach(u => {
-            html += `<div class="user">
-                <div>
-                    ${u.nr}${u.admin ? " *" : ""}
-                </div>
+        userlist.innerHTML = users.map(u => `
+            <div class="user">
+                <div>${u.nr}${u.admin ? " *" : ""}</div>
                 <div>
                     <button class="icon-btn btn-del" data-id="${u.nr}">
                         <svg width="16" height="16"><use href="#icon-del"/></svg>
@@ -753,31 +724,37 @@
                         <svg width="16" height="16"><use href="#icon-admin"/></svg>
                     </button>
                 </div>
-            </div>`;
-        });
-
-        userlist.innerHTML = html;
+            </div>
+        `).join("");
     }
 
     function updateUsers()
     {
-        fetch("/users")
-            .then(r => r.json())
-            .then(data => renderUsers(data.users));
+        apiJson("/users", d => renderUsers(d.users));
+    }
+
+    function addPhone()
+    {
+        let p = document.querySelector('[name="phonenr"]');
+
+        apiJson("/users/add?nr=" + encodeURIComponent(p.value), () => {
+            p.value = "";
+            updateUsers();
+            showStatus("Gebruiker toegevoegd");
+        });
     }
 
     // ================= SETTINGS =================
 
-     function toggleCloseTime()
-     {
-         let enabled = document.getElementById("close_enabled").checked;
+    function toggleCloseTime()
+    {
+        let en = close_enabled.checked;
+        close_hour.disabled = !en;
+        close_min.disabled = !en;
+    }
 
-         document.getElementById("close_hour").disabled = !enabled;
-         document.getElementById("close_min").disabled  = !enabled;
-     }
-
-     function renderSettings(s)
-     {
+    function renderSettings(s)
+    {
         ssid.value = s.ssid || "";
         wifi_pass.value = s.password || "";
         sim_pin.value = s.simpin || "";
@@ -789,183 +766,172 @@
         close_min.value = s.close_min;
 
         toggleCloseTime();
-     }
+    }
 
     function saveSettings()
     {
-        let btn = document.getElementById("btn_save_settings");
+        let btn = btn_save_settings;
 
         btn.disabled = true;
         btn.textContent = "Opslaan...";
 
-        let enabled = close_enabled.checked ? 1 : 0;
+        let en = close_enabled.checked ? 1 : 0;
 
-        fetch(`/settings/update?ssid=${encodeURIComponent(ssid.value)}`
+        apiJson(
+            `/settings/update?ssid=${encodeURIComponent(ssid.value)}`
             + `&password=${encodeURIComponent(wifi_pass.value)}`
             + `&simpin=${encodeURIComponent(sim_pin.value)}`
             + `&door=${motor_time.value}`
             + `&overhead=${garage_time.value}`
-            + `&close_enabled=${enabled}`
+            + `&close_enabled=${close_enabled.checked ? 1 : 0}`
             + `&close_hour=${close_hour.value}`
-            + `&close_min=${close_min.value}`)
-        .then(r => r.json())
-        .then(d => {
+            + `&close_min=${close_min.value}`,
+    
+            // SUCCESS
+            d => {
+                if (d.status === "reset") {
+                    showStatusSticky("Restarting...");
+                    fetch("/reset/now").catch(() => {});
+                    return;
+                }
 
-            if (d.status === "ok")
-            {
                 btn.textContent = "Opgeslagen ✓";
                 showStatus("Instellingen opgeslagen");
-            }
-            else if (d.status === "reset")
-            {
-                showStatusSticky("Restarting...");
-                fetch("/reset/now").catch(() => {});
-            } else
-            {
-                btn.textContent = "Fout";
-                alert(d.errors.join("\n"));
-            }
 
-            setTimeout(() => {
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = "Opslaan";
+                }, 1500);
+            },
+
+            // ERROR
+            () => {
                 btn.disabled = false;
                 btn.textContent = "Opslaan";
-            }, 1500);
-        })
-        .catch(() => {
-            btn.disabled = false;
-            btn.textContent = "Opslaan";
-            showStatus("Opslaan mislukt");
-        });
-    }    
-    
+            }
+        );
+    }
+
     // ================= CONSOLE =================
 
-     function scrollConsoleIfVisible()
-     {
-         const tab = document.getElementById("console_section");
+    function scrollConsoleIfVisible()
+    {
+        const section = document.getElementById("console_section");
+        const box = document.getElementById("console");
 
-         if (tab.classList.contains("active"))
-         {
-             const box = document.getElementById("console");
-             box.scrollTop = box.scrollHeight;
-         }
-     }
+        if (!section.classList.contains("active")) return;
 
-     function renderConsoleFull(logs)
-     {
-         let box = document.getElementById("console");
-         let c   = document.getElementById("console_content");
+        requestAnimationFrame(() => {
+            box.scrollTop = box.scrollHeight;
+        });
+    }
 
-         c.textContent = logs.join("\n");
+    function renderConsoleFull(logs)
+    {
+        const c = document.getElementById("console_content");
 
-         if (logs.length)
-             c.textContent += "\n";
+        c.textContent = logs.join("\n") + (logs.length ? "\n" : "");
+        scrollConsoleIfVisible();
+    }
 
-         scrollConsoleIfVisible();
-     }
+    function appendConsole(logs)
+    {
+        const c = document.getElementById("console_content");
 
-     function appendConsole(logs)
-     {
-         let box = document.getElementById("console");
-         let c   = document.getElementById("console_content");
+        logs.forEach(l => {
+            c.textContent += l + "\n";
+        });
 
-         logs.forEach(line => {
-             c.textContent += line + "\n";
-         });
+        let lines = c.textContent.split("\n");
 
-         // max 50 regels houden
-         let lines = c.textContent.split("\n");
+        if (lines.length > 50)
+            c.textContent = lines.slice(-50).join("\n");
 
-         if (lines.length > 50) {
-             c.textContent = lines.slice(-50).join("\n");
-         }
+        scrollConsoleIfVisible();
+    }
 
-         // scroll container naar beneden
-         scrollConsoleIfVisible();
-     }
-
-     function consoleLoop()
-     {
+    function consoleLoop()
+    {
         fetch("/console?since=" + since)
             .then(r => r.json())
-            .then(data => {
-                if (data.console.changed) {
-                    appendConsole(data.console.logs);
-                    since = data.console.since;
+            .then(d => {
+                if (d.console.changed) {
+                    appendConsole(d.console.logs);
+                    since = d.console.since;
                 }
             })
             .catch(() => {})
-            .finally(() => consoleLoop());
+            .finally(consoleLoop);
     }
-
-    // ================= COMMAND =================
 
     function consoleCommand()
     {
         let p = document.querySelector('[name="command"]');
-        let cmd = p.value;
-
-        fetch("/console/cmd?c=" + encodeURIComponent(cmd));
-
+        fetch("/console/cmd?c=" + encodeURIComponent(p.value));
         p.value = "";
     }
 
-    // ================= USERS ACTIONS =================
+    // ================= EVENTS =================
 
     function initEventListeners()
     {
         document.getElementById("users").addEventListener("click", e => {
 
             let del = e.target.closest(".btn-del");
-            if (del) {
-                return fetch("/users/del?nr=" + encodeURIComponent(del.dataset.id))
-                    .then(() => updateUsers());
-            }
+            if (del)
+                return apiJson("/users/del?nr=" + encodeURIComponent(del.dataset.id), updateUsers);
 
             let adm = e.target.closest(".btn-adm");
-            if (adm) {
-                return fetch("/users/adm?nr=" + encodeURIComponent(adm.dataset.id))
-                    .then(() => updateUsers());
-            }
+            if (adm)
+                return apiJson("/users/adm?nr=" + encodeURIComponent(adm.dataset.id), updateUsers);
         });
-
-        document.addEventListener("touchstart", function(){}, true);
     }
 
     // ================= UI =================
 
-    function sendCmd(url)
-    {
-        fetch(url)
-            .then(r => r.text())
-            .then(showStatus)
-            .catch(() => showStatus("Command failed"));
-    }
-
-    function showStatus(msg)
+    function showStatus(msg, err = false)
     {
         const el = document.getElementById("status");
 
         el.textContent = msg;
+        el.classList.toggle("err", err);
         el.classList.add("show");
 
-        if (statusTimer)
-            clearTimeout(statusTimer);
-
-        statusTimer = setTimeout(() => {
-            el.classList.remove("show");
-        }, 2000);
+        clearTimeout(statusTimer);
+        statusTimer = setTimeout(() => el.classList.remove("show"), 3000);
     }
 
-    function addPhone()
+    function showStatusSticky(msg)
     {
-        let p = document.querySelector('[name="phonenr"]');
+        const el = document.getElementById("status");
 
-        fetch("/users/add?nr=" + encodeURIComponent(p.value))
+        el.textContent = msg;
+        el.classList.add("err", "show");
+
+        clearTimeout(statusTimer);
+    }
+
+    // ================= API =================
+
+    function apiJson(url, onOk, onError)
+    {
+        fetch(url)
             .then(r => r.json())
-            .then(() => {
-                p.value = "";
-                updateUsers();
+            .then(d => {
+                // ❌ ERROR
+                if (d.status === "error") {
+                    showStatus((d.errors || ["Fout"]).join(", "), true);
+                    if (onError) onError(d);   // 👈 belangrijk
+                    return;
+                }
+                // ✅ OK + message
+                if (d.msg) showStatus(d.msg);
+                
+                if (onOk) onOk(d);
+            })
+            .catch(() => {
+                showStatus("Netwerkfout", true);
+                if (onError) onError();
             });
     }
     </script>

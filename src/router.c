@@ -15,18 +15,10 @@
 #include "console.h"
 #include "tasks.h"
 
-#define RESPONSE_SIZE 512
+#define RESPONSE_SIZE 1024
+#define STATUS_RESPONSE_SIZE 2048
 
 /* ===== Helper ===== */
-
-static void send_text(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb, const char *text)
-{
-    state->file_data  = (const unsigned char*)text;
-    state->result_len = strlen(text);
-
-    ws_send_header(pcb, state, "text/plain", state->result_len, false);
-    ws_send_chunk(pcb, state);
-}
 
 static void sendJson(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb, char *json)
 {
@@ -127,13 +119,43 @@ void json_strip_braces(char *s)
     s[len - 2] = '\0';
 }
 
+void json_escape(char *dst, const char *src, size_t maxlen)
+{
+    size_t i = 0;
+
+    while (*src && i < maxlen - 1)
+    {
+        char c = *src++;
+
+        if (c == '"' || c == '\\')
+        {
+            if (i < maxlen - 2)
+            {
+                dst[i++] = '\\';
+                dst[i++] = c;
+            }
+        }
+        else if (c == '\n' || c == '\r')
+        {
+            // skip of vervangen door spatie
+        }
+        else
+        {
+            dst[i++] = c;
+        }
+    }
+
+    dst[i] = '\0';
+}
+
 static void get_users_json(char *response)
 {
     phonebook_entry_t entry;
     int count = phonebook_count();
     int pos = 0;
+    char number[PHONENR_SIZE];
 
-    pos += snprintf(response + pos, RESPONSE_SIZE - pos, "{ \"users\": [");
+    pos += snprintf(response + pos, RESPONSE_SIZE - pos, "{\"users\":[");
 
     bool first = true;
 
@@ -146,11 +168,13 @@ static void get_users_json(char *response)
                 pos += snprintf(response + pos, RESPONSE_SIZE - pos, ",");
             }
 
+            json_escape(number, entry.number, sizeof(number));
+
             pos += snprintf(
                 response + pos,
                 RESPONSE_SIZE - pos,
-                "{ \"nr\": \"%s\", \"admin\": %s }",
-                entry.number,
+                "{\"nr\":\"%s\",\"admin\":%s}",
+                number,
                 entry.isAdmin ? "true" : "false"
             );
 
@@ -158,7 +182,7 @@ static void get_users_json(char *response)
         }
     }
 
-    pos += snprintf(response + pos, RESPONSE_SIZE - pos, "] }");
+    pos += snprintf(response + pos, RESPONSE_SIZE - pos, "]}");
 }
 
 static void get_settings_json(char *response)
@@ -166,6 +190,13 @@ static void get_settings_json(char *response)
     uint8_t close_enabled = 1;
     uint8_t close_hour = 20;
     uint8_t close_min = 30;
+    char ssid[33];
+    char pass[64];
+    char spin[7];
+
+    json_escape(ssid, cfg.ssid, sizeof(ssid));
+    json_escape(pass, cfg.pass, sizeof(pass));
+    json_escape(spin, cfg.sim_pin, sizeof(spin));
 
     if (cfg.close_time == CLOSE_DISABLED)
     {
@@ -189,9 +220,9 @@ static void get_settings_json(char *response)
             "\"close_hour\":%u,"
             "\"close_min\":%u"
         "}}",
-        cfg.ssid,
-        cfg.pass,
-        cfg.sim_pin,
+        ssid,
+        pass,
+        spin,
         cfg.duration_shutter,
         cfg.duration_overhead,
         close_enabled,
@@ -302,19 +333,19 @@ static void handle_index(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 static void handle_open(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
     task_rshutter_up("wifi");
-    send_text(state, pcb, "Rolluik gaat omhoog");
+    sendJson(state, pcb, "{\"status\": \"ok\",\"msg\": \"Rolluik gaat omhoog\"}");
 }
 
 static void handle_close(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
     task_rshutter_down("wifi");
-    send_text(state, pcb, "Rolluik gaat omlaag");
+    sendJson(state, pcb, "{\"status\": \"ok\",\"msg\": \"Rolluik gaat omlaag\"}");
 }
 
 static void handle_overhead(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
     task_overhead_down("wifi");
-    send_text(state, pcb, "Overheaddeur gaat dicht");
+    sendJson(state, pcb, "{\"status\": \"ok\",\"msg\": \"Overheaddeur gaat dicht\"}");
 }
 
 static void handle_info(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
@@ -349,11 +380,11 @@ static void handle_add_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
     if (err == PB_OK)
     {
-        sprintf(response, "{ \"err\": \"Ok\" }");
+        sprintf(response, "{\"status\":\"ok\",\"msg\":\"Nummer toegevoegd\"}");
     }
     else
     {
-        sprintf(response, "{ \"err\": \"%s\" }",phonebook_strerror(err));
+        sprintf(response, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(err));
     }
     
     sendJson(state, pcb, response);
@@ -367,15 +398,17 @@ static void handle_del_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
     // --- parameter ophalen ---
     get_query_param(state->uri, "nr", nr, sizeof(nr));
 
+    printf("nr: %s\n", nr);
+
     int err = task_delete_user(nr, "wifi");
 
     if (err == PB_OK)
     {
-        sprintf(response, "{ \"err\": \"Ok\" }");
+        sprintf(response, "{\"status\": \"ok\",\"msg\": \"Nummer verwijderd\"}");
     }
     else
     {
-        sprintf(response, "{ \"err\": \"%s\" }",phonebook_strerror(err));
+        sprintf(response, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(err));
     }
     
     sendJson(state, pcb, response);
@@ -394,11 +427,11 @@ static void handle_admin(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
     if (result == PB_OK)
     {
-        sprintf(response, "{ \"err\": \"Ok\" }");
+        sprintf(response, "{\"status\":\"ok\"}");
     }
     else
     {
-        sprintf(response, "{ \"err\": \"%s\" }",phonebook_strerror(result));
+        sprintf(response, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(result));
     }
     
     sendJson(state, pcb, response);
@@ -406,11 +439,11 @@ static void handle_admin(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_status(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char users[256];
-    char settings[256];
-    char info[256];
-    char logs[LOG_LINES * LOG_LEN / 2];
-    char response[RESPONSE_SIZE * 2];
+    char users[RESPONSE_SIZE];
+    char settings[512];
+    char info[RESPONSE_SIZE];
+    char logs[RESPONSE_SIZE];
+    char response[STATUS_RESPONSE_SIZE];
 
     get_users_json(users);
     json_strip_braces(users);
@@ -431,7 +464,7 @@ static void handle_status(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[256];
+    char response[RESPONSE_SIZE];
 
     get_settings_json(response);
     
@@ -616,7 +649,7 @@ static void handle_cmd(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
     /* leeg commando? */
     if (cmd_text[0] == '\0')
     {
-        sprintf(response, "{\"status\":\"error\",\"msg\":\"missing command\"}");
+        sprintf(response, "{\"status\":\"error\",\"errors\":[\"missing command\"]}");
         sendJson(state, pcb, response);
         return;
     }
@@ -662,9 +695,9 @@ static const route_t routes[] =
     { "/overhead",   handle_overhead },
     { "/info",       handle_info },
     { "/users",      handle_users },
-    { "/add",        handle_add_user },
-    { "/del",        handle_del_user },
-    { "/adm",        handle_admin },
+    { "/users/add",  handle_add_user },
+    { "/users/del",  handle_del_user },
+    { "/users/adm",  handle_admin },
     { "/status",     handle_status },
     { "/settings",   handle_settings },
     { "/settings/update",   handle_update_settings },

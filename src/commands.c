@@ -125,10 +125,13 @@ static void send_response(command_t *cmd, char *response, bool log)
         cprintf("[TC] %s\n", response);
     }
 
-    /* Als SMS → stuur antwoord terug */
+     /* Alleen SMS sturen als afzender bekend is */
     if (cmd->source == SRC_SMS)
     {
-        modem_send_sms(cmd->sender, response);
+        if (phonebook_exists(cmd->sender))
+        {
+            modem_send_sms(cmd->sender, response);
+        }
     }
 }
 
@@ -206,6 +209,7 @@ void process_command(command_t *cmd)
 
 static bool cmd_init(command_t *cmd, char *response)
 {
+    char normalized[PHONENR_SIZE];
     int err;
 
     if (cmd->source != SRC_SMS)
@@ -218,10 +222,10 @@ static bool cmd_init(command_t *cmd, char *response)
     }
     else
     {
-        err = phonebook_add(cmd->sender);
+        err = phonebook_add(cmd->sender, normalized);
         if(err == PB_OK) {
             strcat(response, "Phonebook initialized.\nYour number has been added. Send HELP to learn more commands");
-            log_add("INIT", "", cmd->sender, true);
+            log_add("INIT", "", normalized, true);
         } else {
             strcat(response, phonebook_strerror(err));
             log_add("INIT", "", cmd->sender, false);

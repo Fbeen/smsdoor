@@ -20,6 +20,7 @@
 line_buffer_t modem_line;
 
 char sms_number[PHONENR_SIZE];
+static char modem_last_line[LINE_BUFFER_SIZE];
 bool waiting_for_sms_text = false;
 volatile bool modem_wait_flag = false;
 static char modem_wait_match[32];
@@ -37,12 +38,27 @@ void modem_send(const char *cmd)
     cprintf("[TM] %s\n", cmd);
 }
 
+static bool modem_last_line_is_error(void)
+{
+    if (strstr(modem_last_line, "ERROR"))
+        return true;
+
+    if (strstr(modem_last_line, "+CMS ERROR"))
+        return true;
+
+    if (strstr(modem_last_line, "+CME ERROR"))
+        return true;
+
+    return false;
+}
+
 void modem_feed_char(char c)
 {
     static bool waiting_for_cmgr_text = false;
     static char sms_text[COMMAND_SIZE];
     static int sms_idx = 0;
     static int last_sms_index = 0;
+    static bool modem_initialized = false;
 
     command_t cmd;
 
@@ -60,6 +76,9 @@ void modem_feed_char(char c)
 
         modem_line.buffer[modem_line.index] = 0;
 
+        strncpy(modem_last_line, modem_line.buffer, sizeof(modem_last_line) - 1);
+        modem_last_line[sizeof(modem_last_line) - 1] = 0;
+
         // filter rommel
         if (strlen(modem_line.buffer) == 0)
         {
@@ -68,7 +87,9 @@ void modem_feed_char(char c)
         }
 
         // logging
-        cprintf("[FM] %s\n", modem_line.buffer);
+        if(strcmp(modem_line.buffer, "OK") != 0 && strcmp(modem_line.buffer, "") != 0) {
+            cprintf("[FM] %s\n", modem_line.buffer);
+        }
 
         // WAIT MATCH (belangrijk!)
         if (modem_wait_match[0] &&
@@ -159,8 +180,12 @@ void modem_feed_char(char c)
             }
             else if (strstr(modem_line.buffer, "READY"))
             {
-                cprintf("[TC] SIM ready\n");
-                modem_init_step2();
+                if (!modem_initialized)
+                {
+                    cprintf("[TC] SIM ready\n");
+                    modem_initialized = true;
+                    modem_init_step2();
+                }
             }
             else if (strstr(modem_line.buffer, "PUK"))
             {
@@ -248,17 +273,45 @@ void modem_send_sms(const char *number, const char *text)
 {
     char cmd[COMMAND_SIZE];
 
-    sprintf(cmd, "AT+CMGS=\"%s\"", number);
+    snprintf(cmd, sizeof(cmd), "AT+CMGS=\"%s\"", number);
     modem_send(cmd);
 
-    if (modem_wait_for(">", 5000))
+    /* wacht op prompt */
+    if (!modem_wait_for(">", 5000))
     {
-        uart_puts(UART_MODEM, text);
-        uart_putc(UART_MODEM, 0x1A); // CTRL+Z
-        cprintf("[TC] SMS sent\n");
+        cprintf("[TC] SMS failed: no prompt\n");
+        return;
     }
 
-    modem_wait_for("OK", 10000);
+    /* stuur tekst */
+    uart_puts(UART_MODEM, text);
+    uart_putc(UART_MODEM, 0x1A); // CTRL+Z
+
+    /* wacht op resultaat */
+    absolute_time_t timeout = make_timeout_time_ms(10000);
+
+    while (!time_reached(timeout))
+    {
+        while (uart_is_readable(UART_MODEM))
+        {
+            char c = uart_getc(UART_MODEM);
+            modem_feed_char(c);
+        }
+
+        if (strstr(modem_last_line, "OK"))
+        {
+            cprintf("[TC] SMS sent OK\n");
+            return;
+        }
+
+        if (modem_last_line_is_error())
+        {
+            cprintf("[TC] SMS failed: %s\n", modem_last_line);
+            return;
+        }
+    }
+
+    cprintf("[TC] SMS timeout\n");
 }
 
 /* ----------------------------------------------------------
@@ -287,10 +340,10 @@ void modem_init()
     cprintf("[TC] Modem responding\n");
 
     modem_send("ATE0");
-    sleep_ms(200);
+    modem_wait_for("OK", 2000);
 
     modem_send("AT+CPIN?");
-    sleep_ms(500);
+    modem_wait_for("CPIN", 2000);
     watchdog_update();
 }
 
@@ -298,29 +351,27 @@ void modem_init_step2()
 {
     // SMS storage SIM
     modem_send("AT+CPMS=\"SM\",\"SM\",\"SM\"");
-    sleep_ms(200);
+    modem_wait_for("OK", 2000);
 
     // SMS text mode
     modem_send("AT+CMGF=1");
-    sleep_ms(200);
+    modem_wait_for("OK", 2000);
 
     // SMS index notification
     modem_send("AT+CNMI=2,1,0,0,0");
-    sleep_ms(200);
+    modem_wait_for("OK", 2000);
 
     watchdog_update();
 
     // Network time update
     modem_send("AT+CTZU=1");
-    sleep_ms(200);
+    modem_wait_for("OK", 2000);
 
     modem_send("AT+CTZR=1");
-    sleep_ms(200);
+    modem_wait_for("OK", 2000);
 
     // Ask network time
     modem_send("AT+CCLK?");
-
-    watchdog_update();
 
     watchdog_update();
 

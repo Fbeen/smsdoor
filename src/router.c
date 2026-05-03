@@ -15,9 +15,6 @@
 #include "console.h"
 #include "tasks.h"
 
-#define RESPONSE_SIZE 1024
-#define STATUS_RESPONSE_SIZE 2048
-
 /* ===== Helper ===== */
 
 static void sendJson(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb, char *json)
@@ -51,6 +48,12 @@ static int hex2int(char c)
  */
 bool get_query_param(const char *uri, const char *key, char *out, size_t out_size)
 {
+    if (out_size > 0)
+        out[0] = '\0';
+
+    if (!uri || !key || !out || out_size == 0)
+        return false;
+    
     const char *q = strchr(uri, '?');
     if (!q) return false;
 
@@ -95,30 +98,6 @@ bool get_query_param(const char *uri, const char *key, char *out, size_t out_siz
     return false;
 }
 
-void json_strip_braces(char *s)
-{
-    size_t len;
-
-    if (s == NULL)
-        return;
-
-    len = strlen(s);
-
-    /* minimaal "{}" */
-    if (len < 2)
-        return;
-
-    /* moet beginnen met { en eindigen met } */
-    if (s[0] != '{' || s[len - 1] != '}')
-        return;
-
-    /* alles 1 positie naar links schuiven */
-    memmove(s, s + 1, len - 2);
-
-    /* nieuwe afsluitende nul */
-    s[len - 2] = '\0';
-}
-
 void json_escape(char *dst, const char *src, size_t maxlen)
 {
     size_t i = 0;
@@ -148,31 +127,47 @@ void json_escape(char *dst, const char *src, size_t maxlen)
     dst[i] = '\0';
 }
 
-static void get_users_json(char *response)
+static int json_append(char *buf, int pos, int max, const char *fmt, ...)
+{
+    if (max <= 0) return 0;
+    if (pos >= max - 1) {
+        buf[max - 1] = '\0';
+        return max - 1;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    int n = vsnprintf(buf + pos, max - pos, fmt, args);
+    va_end(args);
+
+    if (n < 0)
+        return pos;
+
+    if (pos + n >= max)
+        return max - 1;   // ruimte houden voor '\0'
+
+    return pos + n;
+}
+
+static int get_users_json_inner(char *buf, int pos, int max)
 {
     phonebook_entry_t entry;
-    int count = phonebook_count();
-    int pos = 0;
     char number[PHONENR_SIZE];
-
-    pos += snprintf(response + pos, RESPONSE_SIZE - pos, "{\"users\":[");
-
     bool first = true;
+
+    pos = json_append(buf, pos, max, "\"users\":[");
 
     for (int i = 0; i < MAX_PHONES; i++)
     {
         if (phonebook_get(i, &entry))
         {
             if (!first)
-            {
-                pos += snprintf(response + pos, RESPONSE_SIZE - pos, ",");
-            }
+                pos = json_append(buf, pos, max, ",");
 
             json_escape(number, entry.number, sizeof(number));
 
-            pos += snprintf(
-                response + pos,
-                RESPONSE_SIZE - pos,
+            pos = json_append(
+                buf, pos, max,
                 "{\"nr\":\"%s\",\"admin\":%s}",
                 number,
                 entry.isAdmin ? "true" : "false"
@@ -182,10 +177,11 @@ static void get_users_json(char *response)
         }
     }
 
-    pos += snprintf(response + pos, RESPONSE_SIZE - pos, "]}");
+    pos = json_append(buf, pos, max, "]");
+    return pos;
 }
 
-static void get_settings_json(char *response)
+static int get_settings_json_inner(char *buf, int pos, int max)
 {
     uint8_t close_enabled = 1;
     uint8_t close_hour = 20;
@@ -208,9 +204,9 @@ static void get_settings_json(char *response)
         close_min  = cfg.close_time % 60;
     }
 
-    sprintf(
-        response,
-        "{\"settings\":{"
+    pos = json_append(
+        buf, pos, max,
+        "\"settings\":{"
             "\"ssid\":\"%s\","
             "\"password\":\"%s\","
             "\"simpin\":\"%s\","
@@ -219,7 +215,7 @@ static void get_settings_json(char *response)
             "\"close_enabled\":%u,"
             "\"close_hour\":%u,"
             "\"close_min\":%u"
-        "}}",
+        "}",
         ssid,
         pass,
         spin,
@@ -229,94 +225,81 @@ static void get_settings_json(char *response)
         close_hour,
         close_min
     );
+
+    return pos;
 }
 
-static void get_info_json(char *response)
+static int get_info_json_inner(char *buf, int pos, int max)
 {
-    char tmpbuf[INFO_LINE_LEN];
     char line[INFO_LINE_LEN];
+    char esc[INFO_LINE_LEN];
     int i;
+    bool first = true;
 
     /* begin with json */
-    strcpy(response, "{\"info\":[");
+    pos = json_append(buf, pos, max, "\"info\":[");
 
     /* alle regels samenvoegen met \n */
     for (i = 0; i < INFO_LINES; i++)
     {
+        if (!first)
+            pos = json_append(buf, pos, max, ",");
+
         task_info_line(line, i);
-        sprintf(tmpbuf, "\"%s\",", line);
-        strcat(response, tmpbuf);
+        json_escape(esc, line, sizeof(esc));
+        pos = json_append(buf, pos, max, "\"%s\"", esc);
+
+        first = false;
     }
 
-    /* delete last comma */
-    response[strlen(response)-1] = 0;
+    /* end with json */
+    pos = json_append(buf, pos, max, "]");
 
-   /* end with json */
-    strcat(response, "]}");
+    return pos;
 }
 
-void get_console_json(char *json, uint32_t since)
+static int get_console_json_inner(char *buf, int pos, int max, uint32_t since)
 {
-    console_entry_t rows[LOG_LINES];
+    static console_entry_t rows[LOG_LINES];
     int count;
-    int pos = 0;
     uint32_t new_since = since;
+    bool first = true;
+
+    char esc[LOG_LEN];
 
     /* nieuwe regels ophalen */
     count = console_get_since(since, rows, LOG_LINES);
 
-    /* begin JSON */
-    pos += sprintf(json + pos,
-        "{\"console\":{"
-        "\"changed\":%s,"
-        "\"since\":",
-        (count > 0) ? "true" : "false"
-    );
-
-    /* laatste id bepalen */
     if (count > 0)
         new_since = rows[count - 1].id;
 
-    pos += sprintf(json + pos, "%lu,", (unsigned long)new_since);
+    /* header */
+    pos = json_append(buf, pos, max,
+        "\"console\":{"
+        "\"changed\":%s,"
+        "\"since\":%lu,"
+        "\"logs\":[",
+        (count > 0) ? "true" : "false",
+        (unsigned long)new_since
+    );
 
-    /* logs array */
-    pos += sprintf(json + pos, "\"logs\":[");
-
+    /* logs */
     for (int i = 0; i < count; i++)
     {
-        pos += sprintf(json + pos, "\"");
+        if (!first)
+            pos = json_append(buf, pos, max, ",");
 
-        /* string escapen */
-        const char *p = rows[i].text;
-        while (*p)
-        {
-            char c = *p++;
+        json_escape(esc, rows[i].text, sizeof(esc));
 
-            if (c == '"' || c == '\\')
-            {
-                json[pos++] = '\\';
-                json[pos++] = c;
-            }
-            else if (c == '\n' || c == '\r')
-            {
-                /* overslaan */
-            }
-            else
-            {
-                json[pos++] = c;
-            }
-        }
+        pos = json_append(buf, pos, max, "\"%s\"", esc);
 
-        pos += sprintf(json + pos, "\"");
-
-        if (i < count - 1)
-            pos += sprintf(json + pos, ",");
+        first = false;
     }
 
-    /* einde */
-    pos += sprintf(json + pos, "]}}");
+    /* afsluiten */
+    pos = json_append(buf, pos, max, "]}");
 
-    json[pos] = '\0';
+    return pos;
 }
 
 /* ===== HANDLERS ===== */
@@ -350,27 +333,38 @@ static void handle_overhead(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_info(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
+    char *response = state->response;
+    int max = sizeof(state->response);
+    int pos = 0;
 
-    get_info_json(response);
+    pos = json_append(response, pos, max, "{");
+    pos = get_info_json_inner(response, pos, max);
+    pos = json_append(response, pos, max, "}");
+
+    response[pos] = '\0';
 
     sendJson(state, pcb, response);
 }
 
-/* ===== Future handlers ===== */
-
 static void handle_users(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
+    char *response = state->response;
+    int max = sizeof(state->response);
+    int pos = 0;
 
-    get_users_json(response);
+    pos = json_append(response, pos, max, "{");
+    pos = get_users_json_inner(response, pos, max);
+    pos = json_append(response, pos, max, "}");
+
+    response[pos] = '\0';
 
     sendJson(state, pcb, response);
 }
 
 static void handle_add_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
+    char *response = state->response;
+    int max = sizeof(state->response);
     char nr[32];
  
     // --- parameter ophalen ---
@@ -380,11 +374,11 @@ static void handle_add_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
     if (err == PB_OK)
     {
-        sprintf(response, "{\"status\":\"ok\",\"msg\":\"Nummer toegevoegd\"}");
+        snprintf(response, max, "{\"status\":\"ok\",\"msg\":\"Nummer toegevoegd\"}");
     }
     else
     {
-        sprintf(response, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(err));
+        snprintf(response, max, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(err));
     }
     
     sendJson(state, pcb, response);
@@ -392,23 +386,22 @@ static void handle_add_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_del_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
+    char *response = state->response;
+    int max = sizeof(state->response);
     char nr[32];
  
     // --- parameter ophalen ---
     get_query_param(state->uri, "nr", nr, sizeof(nr));
 
-    printf("nr: %s\n", nr);
-
     int err = task_delete_user(nr, "wifi");
 
     if (err == PB_OK)
     {
-        sprintf(response, "{\"status\": \"ok\",\"msg\": \"Nummer verwijderd\"}");
+        snprintf(response, max, "{\"status\": \"ok\",\"msg\": \"Nummer verwijderd\"}");
     }
     else
     {
-        sprintf(response, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(err));
+        snprintf(response, max, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(err));
     }
     
     sendJson(state, pcb, response);
@@ -416,7 +409,8 @@ static void handle_del_user(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_admin(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
+    char *response = state->response;
+    int max = sizeof(state->response);
     char nr[32];
     int  result;
 
@@ -427,11 +421,11 @@ static void handle_admin(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
     if (result == PB_OK)
     {
-        sprintf(response, "{\"status\":\"ok\"}");
+        snprintf(response, max, "{\"status\":\"ok\"}");
     }
     else
     {
-        sprintf(response, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(result));
+        snprintf(response, max, "{\"status\":\"error\",\"errors\":[\"%s\"]}",phonebook_strerror(result));
     }
     
     sendJson(state, pcb, response);
@@ -439,41 +433,51 @@ static void handle_admin(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_status(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char users[RESPONSE_SIZE];
-    char settings[512];
-    char info[RESPONSE_SIZE];
-    char logs[RESPONSE_SIZE];
-    char response[STATUS_RESPONSE_SIZE];
+    char *response = state->response;
+    int max = sizeof(state->response);
+    int pos = 0;
 
-    get_users_json(users);
-    json_strip_braces(users);
+    pos = json_append(response, pos, max, "{");
 
-    get_settings_json(settings);
-    json_strip_braces(settings);
+    pos = get_users_json_inner(response, pos, max);
+    pos = json_append(response, pos, max, ",");
 
-    get_info_json(info);
-    json_strip_braces(info);
+    pos = get_settings_json_inner(response, pos, max);
+    pos = json_append(response, pos, max, ",");
 
-    get_console_json(logs, 0);
-    json_strip_braces(logs);
+    pos = get_info_json_inner(response, pos, max);
+    pos = json_append(response, pos, max, ",");
 
-    sprintf(response, "{%s,%s,%s,%s}", users, settings, info, logs);
-    
+    pos = get_console_json_inner(response, pos, max, 0);
+
+    pos = json_append(response, pos, max, "}");
+
+    response[pos] = '\0';
+
     sendJson(state, pcb, response);
 }
 
 static void handle_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
+    char *response = state->response;
+    int max = sizeof(state->response);
+    int pos = 0;
 
-    get_settings_json(response);
+    pos = json_append(response, pos, max, "{");
+    pos = get_settings_json_inner(response, pos, max);
+    pos = json_append(response, pos, max, "}");
+
+    response[pos] = '\0';
     
     sendJson(state, pcb, response);
 }
 
 static void handle_update_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[512];
+    char *response = state->response;
+    int max = sizeof(state->response);
+    int pos = 0;
+
     char errors[8][64];
 
     char ssid[33];
@@ -481,35 +485,40 @@ static void handle_update_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *p
     char spin[7];
     char temp[48];
 
-    uint16_t door;
-    uint16_t overhead;
+    uint16_t door = 0;
+    uint16_t overhead = 0;
 
-    uint8_t  close_enabled;
-    uint8_t  close_hour;
-    uint8_t  close_min;
+    uint8_t  close_enabled = 0;
+    uint8_t  close_hour = 0;
+    uint8_t  close_min = 0;
 
     int err_count = 0;
-
     bool reset = false;
 
     /* ================= SSID ================= */
     get_query_param(state->uri, "ssid", ssid, sizeof(ssid));
 
     if (strlen(ssid) < 2 || strlen(ssid) > 32)
-        strcpy(errors[err_count++], "SSID must be 2-32 characters long");
+        if (err_count < 8)
+            snprintf(errors[err_count++], sizeof(errors[0]),
+                     "SSID must be 2-32 characters long");
 
     /* ================= PASSWORD ================= */
     get_query_param(state->uri, "password", pass, sizeof(pass));
 
     if (strlen(pass) < 8 || strlen(pass) > 63)
-        strcpy(errors[err_count++], "PASSWORD must be 8-63 characters long");
+        if (err_count < 8)
+            snprintf(errors[err_count++], sizeof(errors[0]),
+                     "PASSWORD must be 8-63 characters long");
 
     /* ================= SIM PIN ================= */
     get_query_param(state->uri, "simpin", spin, sizeof(spin));
 
     if (strlen(spin) < 4 || strlen(spin) > 6)
     {
-        strcpy(errors[err_count++], "PIN must be 4-6 digits");
+        if (err_count < 8)
+            snprintf(errors[err_count++], sizeof(errors[0]),
+                     "PIN must be 4-6 digits");
     }
     else
     {
@@ -517,7 +526,9 @@ static void handle_update_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *p
         {
             if (!isdigit((unsigned char)spin[i]))
             {
-                strcpy(errors[err_count++], "PIN must be numeric");
+                if (err_count < 8)
+                    snprintf(errors[err_count++], sizeof(errors[0]),
+                             "PIN must be numeric");
                 break;
             }
         }
@@ -528,14 +539,18 @@ static void handle_update_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *p
     door = (uint16_t)strtoul(temp, NULL, 10);
 
     if (door < 1 || door > 300)
-        strcpy(errors[err_count++], "runtime door must be 1..300 seconds");
+        if (err_count < 8)
+            snprintf(errors[err_count++], sizeof(errors[0]),
+                     "runtime door must be 1..300 seconds");
 
     /* ================= OVERHEAD ================= */
     get_query_param(state->uri, "overhead", temp, sizeof(temp));
     overhead = (uint16_t)strtoul(temp, NULL, 10);
 
     if (overhead < 1 || overhead > 300)
-        strcpy(errors[err_count++], "runtime overheaddoor must be 1..300 seconds");
+        if (err_count < 8)
+            snprintf(errors[err_count++], sizeof(errors[0]),
+                     "runtime overheaddoor must be 1..300 seconds");
 
     /* ================= CLOSE ENABLED ================= */
     get_query_param(state->uri, "close_enabled", temp, sizeof(temp));
@@ -546,34 +561,41 @@ static void handle_update_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *p
     close_hour = (uint8_t)strtoul(temp, NULL, 10);
 
     if (close_hour > 23)
-        strcpy(errors[err_count++], "close hour must be 0..23");
+        if (err_count < 8)
+            snprintf(errors[err_count++], sizeof(errors[0]),
+                     "close hour must be 0..23");
 
     /* ================= CLOSE MIN ================= */
     get_query_param(state->uri, "close_min", temp, sizeof(temp));
     close_min = (uint8_t)strtoul(temp, NULL, 10);
 
     if (close_min > 59)
-        strcpy(errors[err_count++], "close minute must be 0..59");
+        if (err_count < 8)
+            snprintf(errors[err_count++], sizeof(errors[0]),
+                     "close minute must be 0..59");
 
-    /* ================= ERRORS ================= */
+    /* ================= RESPONSE ================= */
     if (err_count > 0)
     {
-        strcpy(response, "{\"status\":\"error\",\"errors\":[");
+        pos = json_append(response, pos, max,
+                          "{\"status\":\"error\",\"errors\":[");
 
         for (int i = 0; i < err_count; i++)
         {
-            sprintf(temp, "\"%s\",", errors[i]);
-            strcat(response, temp);
+            if (i > 0)
+                pos = json_append(response, pos, max, ",");
+
+            pos = json_append(response, pos, max,
+                              "\"%s\"", errors[i]);
         }
 
-        response[strlen(response) - 1] = 0; /* laatste komma weg */
-        strcat(response, "]}");
+        pos = json_append(response, pos, max, "]}");
     }
     else
     {
-        if(strcmp(ssid, cfg.ssid) != 0) reset = true;
-        if(strcmp(pass, cfg.pass) != 0) reset = true;
-        if(strcmp(spin, cfg.sim_pin) != 0) reset = true;
+        if (strcmp(ssid, cfg.ssid) != 0) reset = true;
+        if (strcmp(pass, cfg.pass) != 0) reset = true;
+        if (strcmp(spin, cfg.sim_pin) != 0) reset = true;
 
         config_set_ssid(ssid);
         config_set_pass(pass);
@@ -589,11 +611,13 @@ static void handle_update_settings(TCP_CONNECT_STATE_T *state, struct tcp_pcb *p
 
         config_save();
 
-        if(reset)
-            strcpy(response, "{\"status\":\"reset\"}");
+        if (reset)
+            pos = json_append(response, pos, max, "{\"status\":\"reset\"}");
         else
-            strcpy(response, "{\"status\":\"ok\"}");
+            pos = json_append(response, pos, max, "{\"status\":\"ok\"}");
     }
+
+    response[pos] = '\0';
 
     sendJson(state, pcb, response);
 }
@@ -605,16 +629,22 @@ static void handle_reset(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 void send_console_timeout(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char json[] = "{\"console\":{\"changed\":false,\"since\":0,\"logs\":[]}}";
-    sendJson(state, pcb, json);
+    sendJson(state, pcb, "{\"console\":{\"changed\":false,\"since\":0,\"logs\":[]}}");
 }
 
 void send_console_json(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char json[LOG_LINES * LOG_LEN / 2];
+    char *response = state->response;
+    int max = sizeof(state->response);
+    int pos = 0;
 
-    get_console_json(json, state->since);
-    sendJson(state, pcb, json);
+    pos = json_append(response, pos, max, "{");
+    pos = get_console_json_inner(response, pos, max, state->since);
+    pos = json_append(response, pos, max, "}");
+
+    response[pos] = '\0';
+
+    sendJson(state, pcb, response);
 }
 
 static void handle_console(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
@@ -637,7 +667,6 @@ static void handle_console(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
 static void handle_cmd(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
     char cmd_text[128];
     char cmdline[128];
 
@@ -649,8 +678,7 @@ static void handle_cmd(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
     /* leeg commando? */
     if (cmd_text[0] == '\0')
     {
-        sprintf(response, "{\"status\":\"error\",\"errors\":[\"missing command\"]}");
-        sendJson(state, pcb, response);
+        sendJson(state, pcb, "{\"status\":\"error\",\"errors\":[\"missing command\"]}");
         return;
     }
 
@@ -664,17 +692,12 @@ static void handle_cmd(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 
     /* process_command schrijft meestal zelf via cprintf/logs.
        JSON reply alleen status teruggeven */
-    sprintf(response, "{\"status\":\"ok\"}");
-
-    sendJson(state, pcb, response);
+    sendJson(state, pcb, "{\"status\":\"ok\"}");
 }
+
 static void handle_ping(TCP_CONNECT_STATE_T *state, struct tcp_pcb *pcb)
 {
-    char response[RESPONSE_SIZE];
-
-    sprintf(response, "{\"status\":\"ok\"}");
- 
-    sendJson(state, pcb, response);
+    sendJson(state, pcb, "{\"status\":\"ok\"}");
 }
 
 /* ===== 404 ===== */

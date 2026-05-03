@@ -40,13 +40,13 @@ typedef struct
 void phonebook_init(void);
 void phonebook_load(phonebook_t *pb);
 static void phonebook_save(phonebook_t *pb);
-int  phonebook_add(const char *number);
+int  phonebook_add(const char *number, char *normalized);
 int  phonebook_remove(const char *number);
 bool phonebook_exists(const char *number);
 int  phonebook_count(void);
 int  phonebook_count_admins(void);
 bool phonebook_get(int index, phonebook_entry_t *entry);
-int  phone_normalize(char *dst, const char *src);
+bool phone_normalize(char *dst, const char *src);
 bool phonebook_is_admin(const char *number);
 int  phonebook_set_admin(const char *number, int isAdmin);
 const char *phonebook_strerror(int err);

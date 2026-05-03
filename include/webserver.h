@@ -1,6 +1,8 @@
 #ifndef WEBSERVER_H
 #define WEBSERVER_H
 
+#define HTTP_RESPONSE_SIZE 2048
+
 #include "lwip/tcp.h"
 #include "lwip/ip_addr.h"
 
@@ -23,6 +25,7 @@ typedef struct TCP_CONNECT_STATE_T {
     uint16_t since;
     uint32_t poll_start_ms;
 
+    char response[HTTP_RESPONSE_SIZE];
 } TCP_CONNECT_STATE_T;
 
 /* Functions used by router */

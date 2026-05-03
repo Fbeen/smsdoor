@@ -16,12 +16,14 @@
 /* Adds a new user */
 int task_add_user(const char *phonenr, const char *who)
 {
-    int result = phonebook_add(phonenr);
+    char normalized[PHONENR_SIZE];
+
+    int result = phonebook_add(phonenr, normalized);
 
     if (result == PB_OK)
     {
-        modem_send_sms(phonenr, "Hallo, Welkom bij de sms rolluik bediening. stuur \"Op\" om het rolluik omhoog, en \"Neer\" om het rolluik omlaag te sturen.");
-        log_add("ADD", phonenr, who, true);
+        modem_send_sms(normalized, "Hallo, Welkom bij de sms rolluik bediening. stuur \"Op\" om het rolluik omhoog, en \"Neer\" om het rolluik omlaag te sturen.");
+        log_add("ADD", normalized, who, true);
 
         return PB_OK;
     }

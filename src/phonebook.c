@@ -38,22 +38,33 @@ void phonebook_init(void)
 void phonebook_load(phonebook_t *pb)
 {
     memcpy(pb, flash_target_contents, sizeof(phonebook_t));
+    
+    if (pb->magic != PHONEBOOK_MAGIC || pb->version != PHONEBOOK_VERSION)
+    {
+        memset(pb, 0, sizeof(phonebook_t));
+        pb->magic = PHONEBOOK_MAGIC;
+        pb->version = PHONEBOOK_VERSION;
+    }
 }
 
 static void phonebook_save(phonebook_t *pb)
 {
+    static uint8_t sector[4096];
+
+    memset(sector, 0, sizeof(sector));   // of 0xFF, maar 0 is voor jouw lege entries veiliger
+    memcpy(sector, pb, sizeof(phonebook_t));
+
     uint32_t ints = save_and_disable_interrupts();
 
     flash_range_erase(FLASH_PHONEBOOK_OFFSET, 4096);
-    flash_range_program(FLASH_PHONEBOOK_OFFSET, (uint8_t *)pb, sizeof(phonebook_t));
+    flash_range_program(FLASH_PHONEBOOK_OFFSET, sector, sizeof(sector));
 
     restore_interrupts(ints);
 }
 
-int phonebook_add(const char *number)
+int phonebook_add(const char *number, char *normalized)
 {
     phonebook_t pb;
-    char normalized[PHONENR_SIZE];
 
     if (!phone_normalize(normalized, number))
         return ERR_PB_INVALID_NUMBER;
@@ -212,7 +223,7 @@ int phonebook_set_admin(const char *number, int isAdmin)
 /*
  * Helper that makes numbers into the +CCNUMBER format
 */
-int phone_normalize(char *dst, const char *src)
+bool phone_normalize(char *dst, const char *src)
 {
     char buf[32];
     int j = 0;
@@ -231,13 +242,13 @@ int phone_normalize(char *dst, const char *src)
     buf[j] = '\0';
 
     if (j == 0)
-        return 0;
+        return false;
 
     /* '+' only at first position */
     for (int i = 1; buf[i]; i++)
     {
         if (buf[i] == '+')
-            return 0;
+            return false;
     }
 
     /* convert */
@@ -255,7 +266,7 @@ int phone_normalize(char *dst, const char *src)
     }
     else
     {
-        return 0;
+        return false;
     }
 
     /* validate */
@@ -265,13 +276,28 @@ int phone_normalize(char *dst, const char *src)
     if (digits < PHONE_MIN_DIGITS || digits > PHONE_MAX_DIGITS)
         return 0;
 
+    /* deny numbers that only have zero's */
+    bool all_zero = true;
+
+    for (int i = 1; dst[i]; i++)
+    {
+        if (dst[i] != '0')
+        {
+            all_zero = false;
+            break;
+        }
+    }
+
+    if (all_zero)
+        return false;
+
     for (int i = 1; dst[i]; i++)
     {
         if (!isdigit((unsigned char)dst[i]))
-            return 0;
+            return false;
     }
 
-    return 1;
+    return true;
 }
 
 const char *phonebook_strerror(int err)
